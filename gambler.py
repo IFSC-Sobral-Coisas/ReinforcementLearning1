@@ -25,10 +25,10 @@ class State:
         self.pi = random.choice(self.actions)
 
 class Solver:
-    N = 20
+    N = 1
     T = 100
     Theta = 1e-3
-    Ph = 0.4
+    Ph = 0.25
 
     def __init__(self, **args):
         '''Parâmetors:
@@ -46,6 +46,8 @@ class Solver:
             self.states[n] = State(n)
             for m in range(min(n, self.T-n)):
                 self.states[n].add_action(Action(1+m, 0))
+        self.states[0].v = 0
+        self.states[self.T].v = 0
 
     def evaluate(self, s:State, a:Action):
         'Calcula o valor do estado s se for seguida a ação a'
