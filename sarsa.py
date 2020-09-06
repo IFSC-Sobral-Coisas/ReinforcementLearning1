@@ -24,7 +24,9 @@ class State:
 
     @property
     def pi(self)->Action:
-        return max(self.actions, key=lambda a: a.q)
+        amax = max(self.actions, key=lambda a: a.q)
+        lmax = filter(lambda a: a.q == amax.q, self.actions)
+        return random.choice(lmax)
 
     @property
     def best(self)->Action:
