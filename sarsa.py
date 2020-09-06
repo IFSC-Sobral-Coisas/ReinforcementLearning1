@@ -60,6 +60,15 @@ class Model:
         for s in self.states.values():
             s.initialize()
 
+    def next(self, s:State)->State:
+        raise NotImplementedError('classe abstrata')
+
+    def episode(self, s:State)->State:
+        while not s.final:
+            a = s.pi
+            s = self.next(s)
+            yield s
+        raise StopIteration('no more states')
 
 class Sarsa:
 

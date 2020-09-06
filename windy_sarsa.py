@@ -136,14 +136,13 @@ if __name__ == '__main__':
         # print(episode, steps, total)
 
     s = model.start
-    while not s.final:
+    for s in model.episode(s):
         m = s.pi.n
         if m == model.Up: m = 'up'
         elif m == model.Down: m = 'down'
         elif m == model.Left: m = 'left'
         elif m == model.Right: m = 'right'
         print('%s %s' % (s.n, m))
-        s = model.next(s)
 
     # for n,s in model.states.items():
     #     print('%s %s' % (n, s.pi.n))
