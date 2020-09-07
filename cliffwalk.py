@@ -42,6 +42,11 @@ if __name__ == '__main__':
         m = s.pi.n
         print('%s %s' % (s.n, m.name))
 
+    for s in model.states.values():
+        print(s.n, end=' ')
+        for a,p in s.policy_dist:
+            print('%s %.2f %.2f' % (a.n.name, a.q, p), end=', ')
+        print('')
     # for n,s in model.states.items():
     #     print('%s %s' % (n, s.pi.n))
 

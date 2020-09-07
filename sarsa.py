@@ -1,7 +1,7 @@
 # Exercício 6.8
 import attr
 import random
-from typing import Tuple
+from typing import Tuple,List
 from functools import reduce
 
 @attr.s
@@ -50,6 +50,16 @@ class State:
     @property
     def total(self)->int:
         return reduce(lambda x,a: x+a.count, self.actions, 0)
+
+    @property
+    def policy_dist(self)->List[Tuple[float,Action]]:
+        t = self.total
+        if t > 0:
+            return [(a, a.count/t) for a in self.actions]
+        else:
+            p = 1/len(self.actions)
+            return [(a, p) for a in self.actions]
+
 
 class Model:
     Epsilon = 0.1
@@ -118,3 +128,4 @@ class ExpSarsa(Sarsa):
         if soma > 0:
             return reduce(lambda x,a: x+a.q*a.count/soma, s.actions, 0)
         return s.amax.q
+
