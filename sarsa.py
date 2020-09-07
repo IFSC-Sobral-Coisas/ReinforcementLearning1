@@ -23,6 +23,10 @@ class State:
 
     @property
     def pi(self)->Action:
+        return self.amax
+
+    @property
+    def amax(self)->Action:
         amax = max(self.actions, key=lambda a: a.q)
         lmax = filter(lambda a: a.q == amax.q, self.actions)
         return random.choice(list(lmax))
@@ -65,9 +69,8 @@ class Model:
 
     def episode(self, s:State)->State:
         while not s.final:
-            a = s.pi
-            s = self.next(s)
             yield s
+            s = self.next(s)
         raise StopIteration('no more states')
 
 class Sarsa:
@@ -81,12 +84,15 @@ class Sarsa:
         self.gamma = args.get('gamma', Sarsa.Gamma)
         self.model.initialize()
 
+    def select_action(self, s: State)->Action:
+        return s.best
+
     def estimate(self, s:State)->int:
         at = s.best
         steps = 0
         while not s.final:
             r,stt = self.model.evaluate(s, at)
-            att = stt.best
+            att = self.select_action(stt)
             at.q += self.alfa*(r + self.gamma*att.q - at.q)
             # print(s.n, at.n, at.q, r, stt.n, att.n, att.q)
             s = stt
@@ -94,3 +100,7 @@ class Sarsa:
             steps += 1
         return steps
 
+class QLearn(Sarsa):
+
+    def select_action(self, s: State) ->Action:
+        return s.amax
