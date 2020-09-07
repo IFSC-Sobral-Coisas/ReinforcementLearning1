@@ -98,10 +98,10 @@ class Sarsa:
         steps = 0
         while not s.final:
             r,stt = self.model.evaluate(s, at)
-            at.q += self.alfa*(r + self.gamma*self.next_value(s) - at.q)
+            at.q += self.alfa*(r + self.gamma*self.next_value(stt) - at.q)
             # print(s.n, at.n, at.q, r, stt.n, att.n, att.q)
-            at = s.pi
             s = stt
+            at = s.pi
             steps += 1
         return steps
 

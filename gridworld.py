@@ -79,6 +79,6 @@ class GridWorld(Model):
         return self.states[self._goal]
 
     def next(self, s: State=Start) -> State:
-        a = s.pi
+        a = s.amax
         col,row = self.__move__(s, a)
         return self.states[(col,row)]

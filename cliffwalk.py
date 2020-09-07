@@ -28,7 +28,7 @@ class CliffWalk(GridWorld):
 
 if __name__ == '__main__':
     model = CliffWalk()
-    p = QLearn(model, alfa=0.5)
+    p = ExpSarsa(model, alfa=0.5)
     episode = 0
     total = 0
     while episode < 1000:
