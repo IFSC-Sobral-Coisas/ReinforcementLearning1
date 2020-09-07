@@ -1,5 +1,7 @@
 # Exercícios sobre Reinforcement Learning
 
+Sutton, R and Barto, A. __Reinforcement Learning, An Introduction. 2nd ed__. MIT Press. London, England. 2018.
+
 * **rl.py**: exercício sobre mutli-armed bandit (seção 2.3)
 * **dp.py**: exercício sobre programação dinâmica (exemplo 4.2)
 * **gambler.py**: exercício do apostador sobre prog. dinâmica
