@@ -1,5 +1,5 @@
 from gridworld import GridWorld,Direction
-from sarsa import State,Action,Sarsa,QLearn
+from sarsa import State,Action,Sarsa,QLearn,ExpSarsa
 from typing import Tuple
 
 class CliffWalk(GridWorld):

@@ -2,12 +2,14 @@
 import attr
 import random
 from typing import Tuple
+from functools import reduce
 
 @attr.s
 class Action:
     '''Uma ação: especifica uma aposta para n unidades monetárias e possui um valor q'''
     n = attr.ib(default=0)
     q = attr.ib(default=0)
+    count = attr.ib(default=0) # quantas vezes foi selecionada esta ação
 
 @attr.s
 class State:
@@ -22,28 +24,32 @@ class State:
         self.actions.append(a)
 
     @property
-    def pi(self)->Action:
-        return self.amax
-
-    @property
     def amax(self)->Action:
         amax = max(self.actions, key=lambda a: a.q)
         lmax = filter(lambda a: a.q == amax.q, self.actions)
         return random.choice(list(lmax))
 
     @property
-    def best(self)->Action:
+    def pi(self)->Action:
         if random.random() <= self.e:
-            return random.choice(self.actions)
-        # identifica ação com maior valor
-        return self.pi
+            a = random.choice(self.actions)
+        else:
+            # identifica ação com maior valor
+            a = self.amax
+            a.count += 1
+        return a
 
     def initialize(self):
         'escolhe uma ação aleatoriamente'
         for a in self.actions:
             a.q = 0
+            a.count = 0
             # if self.final: a.q = 0
             # else: a.q = random.random()
+
+    @property
+    def total(self)->int:
+        return reduce(lambda x,a: x+a.count, self.actions, 0)
 
 class Model:
     Epsilon = 0.1
@@ -84,23 +90,31 @@ class Sarsa:
         self.gamma = args.get('gamma', Sarsa.Gamma)
         self.model.initialize()
 
-    def select_action(self, s: State)->Action:
-        return s.best
+    def next_value(self, s: State)->float:
+        return s.pi.q
 
     def estimate(self, s:State)->int:
-        at = s.best
+        at = s.pi
         steps = 0
         while not s.final:
             r,stt = self.model.evaluate(s, at)
-            att = self.select_action(stt)
-            at.q += self.alfa*(r + self.gamma*att.q - at.q)
+            at.q += self.alfa*(r + self.gamma*self.next_value(s) - at.q)
             # print(s.n, at.n, at.q, r, stt.n, att.n, att.q)
+            at = s.pi
             s = stt
-            at = att
             steps += 1
         return steps
 
 class QLearn(Sarsa):
 
-    def select_action(self, s: State) ->Action:
-        return s.amax
+    def next_value(self, s: State)->float:
+        return s.amax.q
+
+class ExpSarsa(Sarsa):
+
+    def next_value(self, s: State)->float:
+        # valor esperado do valor da próxima ação
+        soma = s.total
+        if soma > 0:
+            return reduce(lambda x,a: x+a.q*a.count/soma, s.actions, 0)
+        return s.amax.q
