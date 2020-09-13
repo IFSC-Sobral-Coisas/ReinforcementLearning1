@@ -121,13 +121,13 @@ class STA:
        return self.ru*self.rate/t
 
      def switch_csma(self):
-         print(self, '---> CSMA')
+         # print(self, '---> CSMA')
          self.fsm = self.fsm_csma
          self.handle_frame = self.handle_frame_csma
          self.state = Estado.Idle
 
      def switch_tdma(self):
-         print(self, '---> TDMA')
+         # print(self, '---> TDMA')
          self.fsm = self.fsm_tdma
          self.handle_frame = self.handle_frame_tdma
          self.state = Estado.Idle
@@ -160,9 +160,11 @@ class STA:
 
      def add_frame(self, data, dt=0):
        if Debug: print('add_frame: %s %s %s %d %.2f' % (self, self.state, data, data.range, self.env.now))
+       # if data.kind == Frame.DATA: print('add_frame:', self, data.dest, data.t0)
        ev = Event(self.env, data.range+dt, Frame.Timeout)
        ev.add_callback(self.frame_rx)
        ev.value = data
+       # print('add_frame:', data.t0)
        self.env.add_event(ev)
 
      def frame_rx(self, e, args):
@@ -176,7 +178,6 @@ class STA:
        fr.seq = self.seqno
        self.seqno += 1
        fr.dest = self.base
-       # print('%d: handle_frame: queued' % self.env.now)
        self.queue.append(fr)
 
      def handle_frame_csma(self, fr, *args):
@@ -292,13 +293,15 @@ class STA:
        out = Frame(Frame.POLL, self.__airtime__(64), sta, self)
        out.range = self.range
        out.period = self.period# - self.env.now
-       sta.add_frame(out, self.PollOverhead+self.ifs+self.backoff)
+       sta.add_frame(out, self.PollOverhead+self.backoff)
        self.state = Estado.Idle
 
      def __update_lat__(self, ev):
+       # if ev.t0 == 0: print('update_lat:', self, ev, self.env.now)
        dt = self.env.now - ev.t0
        self.lat.update(dt)
-       if Debug: print('lat:', ev.sta, dt)
+       # if Debug: print('lat:', ev.sta, dt)
+       # print('lat:', ev.sta, dt, ev.t0)
 
      def __gen_ping_resp__(self):
          q = self._last_rx
@@ -323,6 +326,7 @@ class STA:
              self.ping_lat.update(dt)
 
      def __send_frame__(self, fr:Frame, dt:int):
+         # print('send_frame:', fr.dest, fr.t0)
          fr.dest.add_frame(fr, dt)
 
      def handle_collision_rx(self, ev, tout:Timeout=Timeout.Frame, state:Estado=Estado.Colision):
@@ -580,6 +584,9 @@ class Base(STA):
              fr = Frame(q.kind, q.dt, sta, self)
              fr.app = q.app
              fr.range = sta.range
+             fr.t0 = q.t0
+             if fr.kind == Frame.DATA:
+                fr.seq = q.seq
              sta.add_frame(fr, self.ifs)
 
      def start(self):
@@ -680,11 +687,12 @@ class Base(STA):
          elif ev.kind == ev.PollTimeout:
            self.__sched_sta__()
          elif ev.kind == ev.DATA:
-           self.state = Estado.DATA_rx
-           self._last_rx = ev
-           self.__add_timeout__(Timeout.Frame, ev.dt, self.timeout)
-           # self.__send_ba__(ev)
-           if Debug: print(self, ' timeout para DATA: ', ev.dt, self.env.now+ev.dt)
+           self.handle_start_rx(ev, None, Estado.DATA_rx)
+           # self.state = Estado.DATA_rx
+           # self._last_rx = ev
+           # self.__add_timeout__(Timeout.Frame, ev.dt, self.timeout)
+           # # self.__send_ba__(ev)
+           # if Debug: print(self, ' timeout para DATA: ', ev.dt, self.env.now+ev.dt)
 
        elif self.state == Estado.POLL_RX:
            if ev.kind == ev.Timeout:
@@ -772,6 +780,10 @@ if __name__ == '__main__':
                         default=Maxperiod)
     parser.add_argument('-r', '--rate', help='Taxa de dados, em Mbps (default=%d)' % Rate, type=int, dest='rate', required=False,
                         default=Rate)
+    parser.add_argument('--tdma', help='Modo TDMA (default: CSMA)', dest='tdma', required=False,
+                        action='store_true')
+    parser.add_argument('--csma', help='Modo CSMA (isto já é o default ...)', dest='tdma', required=False,
+                        action='store_false')
     parser.add_argument('--debug', help='Ativa debug', dest='debug', required=False, action='store_true')
     parser.add_argument('-v', help='Verbose: mostra resultados por cpe', dest='verbose', required=False, action='store_true')
 
@@ -816,6 +828,8 @@ if __name__ == '__main__':
     t0 = time.time()
     tempo = args.t * 1000000
     base.start()
+    if args.tdma:
+        base.switch_tdma()
 
     env.run(tempo)
 
@@ -855,3 +869,12 @@ if __name__ == '__main__':
       # else: print(sta, sta.data_rate(tempo), sta.n, sta.N, len(sta.queue), sta.cols)
     lats.sort()
     print(pps(args.nstas, args.minperiod*1000, args.nburst, args.fator), tr, alat/nping, mlat/nping, Mlat/nping, lats[-1], qm/args.nstas, lost)
+    alat,mlat,Mlat = base.lat.valores
+    for sta in base.get_stations():
+        a,m,M = sta.lat.valores
+        alat += a
+        mlat += m
+        Mlat += M
+    N = args.nstas + 1
+    print(tr, alat/N, mlat/N, Mlat/N)
+    # print()
