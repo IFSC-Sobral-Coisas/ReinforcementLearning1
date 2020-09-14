@@ -59,6 +59,7 @@ class STA:
      cwmin = 15
      cwmax = 1023
      ACK_size = 14
+     MaxCollisions = 7
 
      BA_SIZE = 64
 
@@ -102,6 +103,7 @@ class STA:
          self.fsm = self.fsm_csma
          self.handle_frame = self.handle_frame_csma
          self.last_tx_int = 0
+         self._retransmissions = 0
 
      def __last_tx_interval__(self):
          if self.last_tx_int:
@@ -120,13 +122,13 @@ class STA:
      def data_rate(self, t):
        return self.ru*self.rate/t
 
-     def switch_csma(self):
+     def __switch_csma__(self):
          # print(self, '---> CSMA')
          self.fsm = self.fsm_csma
          self.handle_frame = self.handle_frame_csma
          self.state = Estado.Idle
 
-     def switch_tdma(self):
+     def __switch_tdma__(self):
          # print(self, '---> TDMA')
          self.fsm = self.fsm_tdma
          self.handle_frame = self.handle_frame_tdma
@@ -260,6 +262,7 @@ class STA:
          #     q.seq = self._last_ping
          # self.__send_frame__(q, self.ifs)
          self.__send_frame__(q, 0)
+         self._retransmissions += 1
          oh = random.randint(self.TxOverhead[0], self.TxOverhead[1])
          self.__add_timeout__(Timeout.Ack, q.dt + self.get_ack_tout(q.dest) + oh, self.timeout)  # espera por ack
          self.state = state
@@ -282,6 +285,7 @@ class STA:
                data.dest = self.__get_dest__()
            data.range = self.get_range(data.dest)
            self._last_tx = data
+           self._retransmissions = 0
            self.send_frame(data)
            self.u += 1
            self.n += 1
@@ -394,7 +398,7 @@ class STA:
        if Debug: print(self, self.env.now, self.state, len(self.queue), ev)
        # print(self, self.env.now, len(self.queue), ev)
        if ev.kind == ev.MGT:
-           if ev.app == Modo.CSMA: self.switch_csma()
+           if ev.app == Modo.CSMA: self.__switch_csma__()
            return
        if self.state == Estado.Idle:
          if ev.kind == ev.DATA: # veio da base
@@ -443,7 +447,7 @@ class STA:
        if Debug: print(self.env.now, self, self.state, ev)
        # print(self.env.now, self, self.state, ev)
        if ev.kind == ev.MGT:
-           if ev.app == Modo.TDMA: self.switch_tdma()
+           if ev.app == Modo.TDMA: self.__switch_tdma__()
            return
        if self.state == Estado.Idle:
          if ev.kind == ev.DATA: # veio da base
@@ -544,7 +548,10 @@ class STA:
 
        elif self.state == Estado.Boff: # backoff após erro
            if ev.kind == ev.Timeout:
-               self.send_frame(self._last_tx)
+               if self._retransmissions < self.MaxCollisions:
+                   self.send_frame(self._last_tx)
+               elif not self.__dequeue__():
+                   self.state = Estado.Idle
            elif ev.kind == ev.DATA:
                self.handle_start_rx(ev, Estado.NAV)
 
@@ -560,6 +567,7 @@ class Base(STA):
        self.stas = []
        self._stas = []
        self._last = None
+       self._mode = Modo.CSMA
 
      def add_sta(self, sta):
          self.stas.append(sta)
@@ -594,40 +602,55 @@ class Base(STA):
        # mr = max(map(lambda x: x.range, self.stas))
        self.gen.start(self.env, self)
 
-     def switch_csma(self):
-         STA.switch_csma(self)
+     @property
+     def mode(self)->Modo:
+         return self._mode
+
+     @mode.setter
+     def mode(self, modo:Modo):
+         self._mode = modo
+
+     def __switch_csma__(self):
+         STA.__switch_csma__(self)
          fr = Frame(Frame.MGT)
          fr.app = Modo.CSMA
          self.__send_frame__(fr)
 
-     def switch_tdma(self):
-       STA.switch_tdma(self)
-       fr = Frame(Frame.MGT)
-       fr.app = Modo.TDMA
-       self.__send_frame__(fr)
-       self.prox = iter(self.stas)
-       self.iter_sta = self.__next_sta__()
-       # self.gen.start(self.env, self)
-       self.poll_timeout()
+     def __switch_tdma__(self):
+        STA.__switch_tdma__(self)
+        fr = Frame(Frame.MGT)
+        fr.app = Modo.TDMA
+        self.__send_frame__(fr)
+        self.prox = iter(self.stas)
+        self.iter_sta = self.__next_sta__()
+        # self.gen.start(self.env, self)
+        self.poll_timeout()
 
-     # def handle_frame_csma(self, fr, *args):
-     #     if self.env.now >= 20000:
-     #         # print(self.env.now,self.state)
-     #         if self.state == Estado.Idle:
-     #            self.switch_tdma()
-     #     else:
-     #        STA.handle_frame_csma(self, fr, *args)
+     def handle_frame_csma(self, fr, *args):
+         if self._mode == Modo.TDMA:
+             # print(self.env.now,self.state)
+             if self.state == Estado.Idle:
+                self.__switch_tdma__()
+                self.handle_frame_tdma(fr, *args)
+         else:
+            STA.handle_frame_csma(self, fr, *args)
 
      def handle_frame_tdma(self, fr, *args):
-        if isinstance(fr, Event):
-            fr = fr.value
-        # dest = random.choice(self.stas)
-        # ev.range = dest.range
-        # ev.dest = dest
-        fr.seq = self.seqno
-        self.seqno += 1
-        self.queue.append(fr)
-        # print('handle_frame: queue=%d'%len(self.queue), self.env.now)
+         if self._mode == Modo.CSMA:
+             # print(self.env.now,self.state)
+             if self.state == Estado.Idle:
+                 self.__switch_csma__()
+                 self.handle_frame_csma(fr, *args)
+         else:
+            if isinstance(fr, Event):
+                    fr = fr.value
+            # dest = random.choice(self.stas)
+            # ev.range = dest.range
+            # ev.dest = dest
+            fr.seq = self.seqno
+            self.seqno += 1
+            self.queue.append(fr)
+            # print('handle_frame: queue=%d'%len(self.queue), self.env.now)
 
      def __next_sta__(self):
          while True:
@@ -829,7 +852,7 @@ if __name__ == '__main__':
     tempo = args.t * 1000000
     base.start()
     if args.tdma:
-        base.switch_tdma()
+        base.__switch_tdma__()
 
     env.run(tempo)
 
