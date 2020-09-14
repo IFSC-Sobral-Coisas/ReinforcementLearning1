@@ -104,6 +104,21 @@ class STA:
          self.handle_frame = self.handle_frame_csma
          self.last_tx_int = 0
          self._retransmissions = 0
+         self._frames = 0
+         self._frames0 = 0
+         self._t0 = self.env.now
+
+     @property
+     def num_clients(self)->int:
+         return len(self._stas)
+
+     @property
+     def pps(self)->int:
+         dt = self.env.now - self._t0
+         rate = (self._frames - self._frames0)/dt
+         self._frames0 = self._frames
+         self._t0 = self.env.now
+         return int(rate)
 
      def __last_tx_interval__(self):
          if self.last_tx_int:
@@ -289,6 +304,7 @@ class STA:
            self.send_frame(data)
            self.u += 1
            self.n += 1
+           self._frames += 1
            # print('>>> dequeue: sent frame')
            return True
          return False
@@ -358,6 +374,7 @@ class STA:
          if self._last_rx.dest == self and self._last_rx.kind == Frame.DATA:
              dt = self.__send_ba__(self._last_rx)
              if self.__check_seq__():
+                 self._frames += 1
                  self.__update_lat__(self._last_rx)
                  if self._last_rx.app == App.PingReq:
                      self.__gen_ping_resp__()
@@ -569,6 +586,10 @@ class Base(STA):
        self._last = None
        self._mode = Modo.CSMA
 
+     @property
+     def num_clients(self)->int:
+         return len(self._stas)
+
      def add_sta(self, sta):
          self.stas.append(sta)
          self._stas.append(sta)
@@ -601,6 +622,12 @@ class Base(STA):
        if not self.stas: raise RuntimeError('falta incluir ao menos um STA')
        # mr = max(map(lambda x: x.range, self.stas))
        self.gen.start(self.env, self)
+
+     def set_tdma(self):
+         self._mode = Modo.TDMA
+
+     def set_csma(self):
+         self._mode = Modo.CSMA
 
      @property
      def mode(self)->Modo:
@@ -852,7 +879,7 @@ if __name__ == '__main__':
     tempo = args.t * 1000000
     base.start()
     if args.tdma:
-        base.__switch_tdma__()
+        base.set_tdma()
 
     env.run(tempo)
 
