@@ -126,6 +126,9 @@ class Waiter:
 class Latencia:
 
     def __init__(self):
+        self.reset()
+
+    def reset(self):
         self.avg = 0
         self.minima = 1e10
         self.maxima = 0

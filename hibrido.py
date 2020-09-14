@@ -107,18 +107,33 @@ class STA:
          self._frames = 0
          self._frames0 = 0
          self._t0 = self.env.now
+         self._last_lat = Latencia()
 
      @property
      def num_clients(self)->int:
          return len(self._stas)
 
      @property
+     def currlatency(self)->float:
+         a,m,M = self._last_lat.valores
+         self._last_lat.reset()
+         return a
+
+     @property
+     def currpps(self)->int:
+         try:
+             dt = (self.env.now - self._t0)/1e6
+             rate = (self._frames - self._frames0)/dt
+         except:
+             rate = 0
+         return int(rate)
+
+     @property
      def pps(self)->int:
-         dt = self.env.now - self._t0
-         rate = (self._frames - self._frames0)/dt
+         rate = self.currpps
          self._frames0 = self._frames
          self._t0 = self.env.now
-         return int(rate)
+         return rate
 
      def __last_tx_interval__(self):
          if self.last_tx_int:
@@ -210,7 +225,7 @@ class STA:
        #     self.queue.appendleft(fr)
        # else:
        #     self.queue.append(fr)
-       self.handle_frame_tdma(fr)
+       STA.handle_frame_tdma(self, fr)
        if self.state == Estado.Idle:
            self.__dequeue__()
        #      # ev = Event(self.env, self.env.now)
@@ -304,7 +319,6 @@ class STA:
            self.send_frame(data)
            self.u += 1
            self.n += 1
-           self._frames += 1
            # print('>>> dequeue: sent frame')
            return True
          return False
@@ -320,6 +334,7 @@ class STA:
        # if ev.t0 == 0: print('update_lat:', self, ev, self.env.now)
        dt = self.env.now - ev.t0
        self.lat.update(dt)
+       self._last_lat.update(dt)
        # if Debug: print('lat:', ev.sta, dt)
        # print('lat:', ev.sta, dt, ev.t0)
 
@@ -438,6 +453,7 @@ class STA:
              self.__cancel_timeout__(Timeout.Frame)
              self.ru += (self._last_tx.dt - self.Overhead - self.ifs)
              self.N += 1
+             self._frames += 1
              self.__add_timeout__(Timeout.Frame, ev.dt, self.timeout)
              self.state = Estado.BA_Wait
          elif ev.kind == ev.Timeout:
@@ -449,6 +465,7 @@ class STA:
          if ev.kind == ev.BA:       # envio de DATA
            self.ru += (self._last_tx.dt - self.Overhead - self.ifs)
            self.N += 1
+           self._frames += 1
            self.__send_poll__(self.base)
          elif ev.kind == ev.Timeout:       # envio de DATA
              self.__send_poll__(self.base)
@@ -535,6 +552,7 @@ class STA:
          elif ev.kind == ev.BA:
              self.__cancel_timeout__(Timeout.Ack)
              if ev.dest == self:
+                 self._frames += 1
                  self.state = Estado.BA_Wait
                  self.__add_timeout__(Timeout.Frame, ev.dt, self.timeout)
              else:
@@ -629,6 +647,9 @@ class Base(STA):
      def set_csma(self):
          self._mode = Modo.CSMA
 
+     def set_mode(self, m:Modo):
+         self._mode = m
+
      @property
      def mode(self)->Modo:
          return self._mode
@@ -654,30 +675,32 @@ class Base(STA):
         self.poll_timeout()
 
      def handle_frame_csma(self, fr, *args):
+         # print('handle_frame_csma:', self._mode)
          if self._mode == Modo.TDMA:
              # print(self.env.now,self.state)
              if self.state == Estado.Idle:
                 self.__switch_tdma__()
                 self.handle_frame_tdma(fr, *args)
-         else:
-            STA.handle_frame_csma(self, fr, *args)
+                return
+         STA.handle_frame_csma(self, fr, *args)
 
      def handle_frame_tdma(self, fr, *args):
+         # print('handle_frame_tdma:', self._mode)
          if self._mode == Modo.CSMA:
              # print(self.env.now,self.state)
              if self.state == Estado.Idle:
                  self.__switch_csma__()
                  self.handle_frame_csma(fr, *args)
-         else:
-            if isinstance(fr, Event):
-                    fr = fr.value
-            # dest = random.choice(self.stas)
-            # ev.range = dest.range
-            # ev.dest = dest
-            fr.seq = self.seqno
-            self.seqno += 1
-            self.queue.append(fr)
-            # print('handle_frame: queue=%d'%len(self.queue), self.env.now)
+                 return
+         if isinstance(fr, Event):
+                fr = fr.value
+        # dest = random.choice(self.stas)
+        # ev.range = dest.range
+        # ev.dest = dest
+         fr.seq = self.seqno
+         self.seqno += 1
+         self.queue.append(fr)
+        # print('handle_frame: queue=%d'%len(self.queue), self.env.now)
 
      def __next_sta__(self):
          while True:
@@ -761,6 +784,7 @@ class Base(STA):
              self.__cancel_timeout__(Timeout.Frame)
              self.ru += (self._last_tx.dt - self.Overhead)
              self.N += 1
+             self._frames += 1
              self.__add_timeout__(Timeout.Frame, ev.dt, self.timeout)
              self.state = Estado.BA_Wait
            elif ev.kind == ev.Timeout:
@@ -772,6 +796,7 @@ class Base(STA):
 
        elif self.state == Estado.POLL_END: # periodo do Poll acabou, mas estava em transmissao
            if Debug: print(self, 'POLL_END', len(self.queue))
+           self._frames += 1
            self.__sched_sta__()
 
        elif self.state == Estado.BA_Wait:
@@ -918,7 +943,7 @@ if __name__ == '__main__':
       # if lat[0]: print(sta, sta.data_rate(tempo), sta.n, sta.N, len(sta.queue), sta.cols, lat[0], lat[1], lat[2])
       # else: print(sta, sta.data_rate(tempo), sta.n, sta.N, len(sta.queue), sta.cols)
     lats.sort()
-    print(pps(args.nstas, args.minperiod*1000, args.nburst, args.fator), tr, alat/nping, mlat/nping, Mlat/nping, lats[-1], qm/args.nstas, lost)
+    print(base.mode, base.currpps, tr, alat/nping, mlat/nping, Mlat/nping, lats[-1], qm/args.nstas, lost)
     alat,mlat,Mlat = base.lat.valores
     for sta in base.get_stations():
         a,m,M = sta.lat.valores
@@ -926,5 +951,5 @@ if __name__ == '__main__':
         mlat += m
         Mlat += M
     N = args.nstas + 1
-    print(tr, alat/N, mlat/N, Mlat/N)
+    print(tr, alat/N, mlat/N, Mlat/N, base.pps)
     # print()

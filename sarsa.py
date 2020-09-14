@@ -36,7 +36,7 @@ class State:
         else:
             # identifica ação com maior valor
             a = self.amax
-            a.count += 1
+        a.count += 1
         return a
 
     def initialize(self):
@@ -103,15 +103,25 @@ class Sarsa:
     def next_value(self, s: State)->float:
         return s.pi.q
 
-    def estimate(self, s:State)->int:
+    def evaluate(self, s:State):
         at = s.pi
+        r, stt = self.model.evaluate(s, at)
+        at.q += self.alfa * (r + self.gamma * self.next_value(stt) - at.q)
+        # print(s.n, at.n, at.q, r, stt.n, att.n, att.q)
+        s = stt
+        at = s.pi
+        return s,at
+
+    def estimate(self, s:State)->int:
+        # at = s.pi
         steps = 0
         while not s.final:
-            r,stt = self.model.evaluate(s, at)
-            at.q += self.alfa*(r + self.gamma*self.next_value(stt) - at.q)
-            # print(s.n, at.n, at.q, r, stt.n, att.n, att.q)
-            s = stt
-            at = s.pi
+            s,a = self.evaluate(s)
+            # r,stt = self.model.evaluate(s, at)
+            # at.q += self.alfa*(r + self.gamma*self.next_value(stt) - at.q)
+            # # print(s.n, at.n, at.q, r, stt.n, att.n, att.q)
+            # s = stt
+            # at = s.pi
             steps += 1
         return steps
 
