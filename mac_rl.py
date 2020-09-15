@@ -27,6 +27,8 @@ class MacAdaptativo(Model):
         self._ppsmax = args.get('pps_max', MacAdaptativo.PPS_Max)
         self._alfa = args.get('alfa', MacAdaptativo.Alfa)
         self._rate = 0
+        self._frames = 0
+        self._lost = 0
         Model.__init__(self, **args)
 
     def __initialize__(self):
@@ -50,19 +52,27 @@ class MacAdaptativo(Model):
         return self.states[(pps,self._base.num_clients)]
 
     def evaluate(self, s:State, a:Action)->Tuple[float,State]:
-        pps = self._base.pps # a recompensa é o pps atual ??!!
+        pps = self._base.frames - self._frames
+        lost = self._base.cols - self._lost
+        self._lost = self._base.cols
+        self._frames = self._base.frames
+        # r = pps - lost
+        r = -lost
+        # pps = self._base.pps # a recompensa é o pps atual ??!!
         lat = self._base.currlatency
-        if not lat: lat=1
-        else: lat /= 1e3
-        pps /= lat
-        r = pps - self._rate # recompensa é a diferença entre pps atual, e o pps médio
-
+        # if not lat: lat=3 # ref: 1000 us
+        # else: lat = math.log10(lat)-3
+        # r /= lat
+        lat = min(lat/10, 1000000)
+        r -= lat
+        # r = pps - self._rate # recompensa é a diferença entre pps atual, e o pps médio
+        # r = self.__calc_pps__(abs(r))*math.copysign(1,r)
         # calcula PPS médio
         self._rate = pps*self._alfa + (1-self._alfa)*self._rate
         rate = self.__calc_pps__(self._rate)
         n = self._base.num_clients # normalmente não muda, mas deve-se considerar uma rede em que cpes variam
         stt = self.states[(rate,n)]
-        # print('eval:', s.n, stt.n, pps, s.amax.n.name, lat)
+        # print('eval:', s.n, stt.n, pps, s.amax.n.name, r, lat)
         return r,stt
 
 
@@ -179,8 +189,9 @@ if __name__ == '__main__':
     s = modelo.currstate
     while t0 <= tempo:
         env.run(t0)
-        s,a = algo.evaluate(s)
-        base.set_mode(a.n)
+        if t0 > 5000000: # 5 segundos
+            s,a = algo.evaluate(s)
+            base.set_mode(a.n)
         # print(s.n, a)
         t0 += step
 

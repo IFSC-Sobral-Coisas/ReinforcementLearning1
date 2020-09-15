@@ -103,6 +103,7 @@ class STA:
          self.fsm = self.fsm_csma
          self.handle_frame = self.handle_frame_csma
          self.last_tx_int = 0
+         self._last_tx = None
          self._retransmissions = 0
          self._frames = 0
          self._frames0 = 0
@@ -118,6 +119,10 @@ class STA:
          a,m,M = self._last_lat.valores
          self._last_lat.reset()
          return a
+
+     @property
+     def frames(self)->int:
+         return self._frames
 
      @property
      def currpps(self)->int:
@@ -250,6 +255,7 @@ class STA:
          if cnt != None:
              self.boff_cnt = cnt
              delay = self.IFS
+             self.cols += 1
          else:
              delay = self.SlotTime
          self.__add_timeout__(Timeout.Backoff, delay, self.backoff_dec)
@@ -291,6 +297,9 @@ class STA:
          # if q.app == App.PingReq:
          #     q.seq = self._last_ping
          # self.__send_frame__(q, self.ifs)
+         if q == None:
+             self.state = Estado.Idle
+             return
          self.__send_frame__(q, 0)
          self._retransmissions += 1
          oh = random.randint(self.TxOverhead[0], self.TxOverhead[1])
@@ -457,6 +466,7 @@ class STA:
              self.__add_timeout__(Timeout.Frame, ev.dt, self.timeout)
              self.state = Estado.BA_Wait
          elif ev.kind == ev.Timeout:
+             self.cols += 1
              self.send_frame(self._last_tx)
          elif ev.kind == ev.PollTimeout: # acabou timeslot
            self.state = Estado.POLL_END
@@ -468,6 +478,7 @@ class STA:
            self._frames += 1
            self.__send_poll__(self.base)
          elif ev.kind == ev.Timeout:       # envio de DATA
+             self.cols += 1
              self.__send_poll__(self.base)
 
        elif self.state == Estado.BA_Wait:
@@ -788,6 +799,7 @@ class Base(STA):
              self.__add_timeout__(Timeout.Frame, ev.dt, self.timeout)
              self.state = Estado.BA_Wait
            elif ev.kind == ev.Timeout:
+               self.cols += 1
                self.send_frame(self._last_tx)
            elif ev.kind == ev.PollTimeout:
              self.state = Estado.POLL_END
