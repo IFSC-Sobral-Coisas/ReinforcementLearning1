@@ -955,13 +955,13 @@ if __name__ == '__main__':
       # if lat[0]: print(sta, sta.data_rate(tempo), sta.n, sta.N, len(sta.queue), sta.cols, lat[0], lat[1], lat[2])
       # else: print(sta, sta.data_rate(tempo), sta.n, sta.N, len(sta.queue), sta.cols)
     lats.sort()
-    print(base.mode, base.currpps, tr, alat/nping, mlat/nping, Mlat/nping, lats[-1], qm/args.nstas, lost)
-    alat,mlat,Mlat = base.lat.valores
-    for sta in base.get_stations():
-        a,m,M = sta.lat.valores
-        alat += a
-        mlat += m
-        Mlat += M
-    N = args.nstas + 1
-    print(tr, alat/N, mlat/N, Mlat/N, base.pps)
+    print('modo=%s, pps=%d, vazão média=%d, latências: média=%d, mín=%d, max=%d, perdas=%d' % (base.mode.name, base.currpps, tr, alat/nping, mlat/nping, Mlat/nping, lost))
+    # alat,mlat,Mlat = base.lat.valores
+    # for sta in base.get_stations():
+    #     a,m,M = sta.lat.valores
+    #     alat += a
+    #     mlat += m
+    #     Mlat += M
+    # N = args.nstas + 1
+    # print(tr, alat/N, mlat/N, Mlat/N, base.pps)
     # print()

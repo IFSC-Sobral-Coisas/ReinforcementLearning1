@@ -187,13 +187,20 @@ if __name__ == '__main__':
     algo = ExpSarsa(modelo, gamma=args.gamma, alfa=args.alfa)
     t0 = step
     s = modelo.currstate
-    while t0 <= tempo:
-        env.run(t0)
-        if t0 > 5000000: # 5 segundos
+    tfinal = tempo
+    n = 1
+    while n < 40:
+        print(n,tfinal/1000)
+        maxT = n*args.maxperiod*1000
+        for sta in base.stas: sta.gen.maxT = maxT
+        while t0 <= tfinal:
+            env.run(t0)
             s,a = algo.evaluate(s)
             base.set_mode(a.n)
-        # print(s.n, a)
-        t0 += step
+            # print(s.n, a)
+            t0 += step
+        n += 1
+        tfinal += tempo
 
     tu = base.u
     tru = base.ru
@@ -249,5 +256,6 @@ if __name__ == '__main__':
             if not n: continue
             print(s.n, s.amax.n.name, end=' ')
             for a, p in s.policy_dist:
-                print('%s %.2f %.2f, %d' % (a.n.name, a.q, p, a.count), end=', ')
+                # print('%s %.2f %.2f, %d' % (a.n.name, a.q, p, a.count), end=', ')
+                print('%s %.2f %d' % (a.n.name, p, a.count), end=', ')
             print('')
