@@ -142,12 +142,13 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    # cria o motor do simulador
     env = Engine()
 
     # com os valores acima, cada STA ou a base geram um tráfego de 8.5 Mbps
-
     Debug = args.debug
 
+    # seleciona o tipo de gerador de tráfego da base
     if args.base == 'ping':
         gen = PingGen(Um_Segundo, 64)
     elif args.base == 'bursty':
@@ -156,6 +157,9 @@ if __name__ == '__main__':
         gen = TrafficGen(args.minperiod*1000, args.maxperiod*1000, args.minsize, args.maxsize)
 
     # gen = TrafficGen(minT*fator, maxT * fator, 1500, 16384)
+    # cria os geradores de tráfego dos clientes
+    # geradores em rajada ("bursty") na verdade são geradores com intervalos
+    # entre quadros reduzidos de acordo com o parâmetro "fator"
     nburst = args.nburst
     nping = args.nping
     base = Base(env, args.rate, gen)
@@ -178,41 +182,61 @@ if __name__ == '__main__':
       base.add_sta(sta)
       sta.start()
 
-    t0 = time.time()
+    # prepara para executar o simulador combinado com o controlador
+    # de modo de operação
+    # tempo: duração total da simulação
+    # step: intervalo entre intervenções do controlador
     tempo = args.t * 1000000
     step = args.step * 1000
     base.start()
 
+    # cria o modelo para o controlador
     modelo = MacAdaptativo(base, pps_inc=args.pps_inc, pps_max=args.pps_max, alfa=args.beta, epsilon=args.epsilon)
+    # cria o algoritmo do controlador
     algo = ExpSarsa(modelo, gamma=args.gamma, alfa=args.alfa)
-    t0 = step
-    s = modelo.currstate
-    tfinal = tempo
-    n = 1
-    while n < 40:
-        print(n,tfinal/1000)
-        maxT = n*args.maxperiod*1000
-        for sta in base.stas: sta.gen.maxT = maxT
-        while t0 <= tfinal:
-            env.run(t0)
-            s,a = algo.evaluate(s)
-            base.set_mode(a.n)
-            # print(s.n, a)
-            t0 += step
-        n += 1
-        tfinal += tempo
 
+    # t0: tempo final deste intervalo de simulação (simulador executa até que tempo
+    # de simulação chegue ao valor de "t0")
+    # tfinal: tempo em que a simulação como um todo deve terminar
+    t0 = step
+    tfinal = tempo
+
+    # estado inicial do controlador
+    s = modelo.currstate
+
+    # executa o simulador
+    while t0 <= tfinal:
+        env.run(t0)
+        # chama o controlador, que informa a ação
+        # a ser executada ("a")
+        s,a = algo.evaluate(s)
+        base.set_mode(a.n)
+        # print(s.n, a)
+        t0 += step
+
+    # obtém as estatísticas da simulação
+
+    # quantidade de quadros transmitidos
     tu = base.u
+    # temo de uso do canal
     tru = base.ru
+    # taxa de dados efetiva
     tr = base.data_rate(tempo)
+
+    # se foi usado gerador do tipo ping,
+    # avalia as latências obtidas
     nping = 0
     if args.base == 'ping':
         alat,mlat,Mlat = base.ping_lat.valores
         nping += 1
     else:
         alat,mlat,Mlat = 0,0,0
+
     if Debug or args.verbose: print('\n\nBase:', base.n, len(base.queue), base.N, base.data_rate(tempo), alat,mlat,Mlat)
     # print('\n\nBase:', base.data_rate(Tempo), base.n, base.N, len(base.queue), alat,mlat,Mlat)
+
+    # atualiza valores de quadros transmitidos, taxa de dados efetiva e latẽncias
+    # para todas as estações clientes
     lats = [Mlat]
     qm = len(base.queue)
     lost = base.ping_lat.lost
@@ -232,29 +256,42 @@ if __name__ == '__main__':
       except Exception as e:
           # print(sta, e)
           pass
+      # quantidade de quadros que não foram transmitidos (em espera nas filas de saída)
       qm += len(sta.queue)
       if Debug or args.verbose: print(sta, sta.n, len(sta.queue), sta.N, sta.data_rate(tempo), lat[0], lat[1], lat[2])
-      # if lat[0]: print(sta, sta.data_rate(tempo), sta.n, sta.N, len(sta.queue), sta.cols, lat[0], lat[1], lat[2])
-      # else: print(sta, sta.data_rate(tempo), sta.n, sta.N, len(sta.queue), sta.cols)
-    lats.sort()
-    print(base.currpps, tr, alat/nping, mlat/nping, Mlat/nping, lats[-1], qm/args.nstas, lost)
-    alat,mlat,Mlat = base.lat.valores
-    for sta in base.get_stations():
-        a,m,M = sta.lat.valores
-        alat += a
-        mlat += m
-        Mlat += M
-    N = args.nstas + 1
-    print(tr, alat/N, mlat/N, Mlat/N, base.currpps)
 
+    # mostra um sumário: PPS na base ao final da simulação, taxa de dados efetiva, latências média, mínima e máxima,
+    # comprimento médio das filas de saída, contagem de quadros perdidos
+    # OBS: latências de ping (se foi usado)
+    if args.base == 'ping':
+        print(base.currpps, tr, alat/nping, mlat/nping, Mlat/nping, qm/args.nstas, lost)
+    else:
+        # sumariza as latências
+        # de quadros em geral
+        alat,mlat,Mlat = base.lat.valores
+        for sta in base.get_stations():
+            a,m,M = sta.lat.valores
+            alat += a
+            mlat += m
+            Mlat += M
+        N = args.nstas + 1
+        # mostra um sumário: PPS na base ao final da simulação, taxa de dados efetiva, latências média, mínima e máxima,
+        # comprimento médio das filas de saída, contagem de quadros perdidos
+        # OBS: latências de quadros de dados em geral
+        print(base.currpps, tr, alat/N, mlat/N, Mlat/N, qm/args.nstas, lost)
+
+    # mostra a policy
     if args.policy:
-        # print('%10s %16s %16s,%.3f,%.3f,%d ')
-        for s in modelo.states.values():
+       # para cada estado
+       for s in modelo.states.values():
             n = 0
+            # identifica as ações que foram efetivamente usadas
             for a,p in s.policy_dist:
                 n += (a.count > 0)
             if not n: continue
+            # mostra a ação da policy (maior valor)
             print(s.n, s.amax.n.name, end=' ')
+            # mostra todas as ações, com respectivos valores, probabilidades e contagens
             for a, p in s.policy_dist:
                 # print('%s %.2f %.2f, %d' % (a.n.name, a.q, p, a.count), end=', ')
                 print('%s %.2f %d' % (a.n.name, p, a.count), end=', ')
