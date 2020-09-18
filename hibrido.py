@@ -896,7 +896,9 @@ if __name__ == '__main__':
     for x in range(args.nstas):
       if nburst > 0:
          # gen = BurstTrafficGen(50000, 150000, 8, 1500, 32768)
-         gen = TrafficGen(args.minperiod * 1000/args.fator, args.maxperiod * 1000/args.fator, args.minsize, args.maxsize)
+         gen = BurstTrafficGen(args.minperiod, 1000, args.minsize,
+                               maxsize=args.maxsize, peakduration=300, peakrate=4000)
+         # gen = TrafficGen(args.minperiod * 1000/args.fator, args.maxperiod * 1000/args.fator, args.minsize, args.maxsize)
          nburst -= 1
       elif nping > 0:
           nping -= 1
@@ -905,8 +907,8 @@ if __name__ == '__main__':
       #   gen = ConstantTrafficGen(20000, 200,65536)
       #   nconst -= 1
       else:
-          gen = TrafficGen(args.minperiod * 1000, args.maxperiod * 1000, args.minsize,
-                           args.maxsize)
+          gen = RateTrafficGen(args.minperiod, args.minsize,
+                           maxsize=args.maxsize)
       sta = STA(env, args.rate, gen)
       sta.add_base(base, random.uniform(args.range/2, args.range))
       base.add_sta(sta)

@@ -96,25 +96,29 @@ class RateTrafficGen(TrafficGen):
   def __init__(self, rate:int, minsize:int, maxsize:int=0, start:int=0):
     '''
     Construtor
-    :param rate: a taxa de dados do fluxo de quadros, dada em Bps
+    :param rate: a taxa de dados do fluxo de quadros, dada em kBps
     :param minsize: menor tamanho de quadro
     :param maxsize: maior tamanho de quadro
     :param start: inicio da geração de quadros
     '''
     TrafficGen.__init__(self, 0, 0, minsize, max(minsize, maxsize), start)
-    self.rate = rate
+    self.rate = rate*1000
     self._octets = 0
 
   @property
   def curr_rate(self)->int:
     'Taxa de dados atual'
-    return int(self._octets/(self.env.now - self.startTime))
+    dt = 1e-6*(self.env.now - self.startTime)
+    if dt > 0:
+      return int(self._octets/dt)
+    else:
+      return 0
 
   def run(self, e:Event, args):
     e = self.__gen_frame__()
 
     self._octets += e.size
-    T = self._octets/self.rate - self.env.now
+    T = max(1e6*e.size/self.rate, 1e6*self._octets/self.rate - self.env.now)
     self.__add_timeout__(T, self.run)
 
 class ConstantTrafficGen(RateTrafficGen):
@@ -171,38 +175,37 @@ class BurstTrafficGen(RateTrafficGen):
     maxsize = args.get('maxsize', minsize)
     start = args.get('start', 0)
     RateTrafficGen.__init__(self, baserate, minsize, maxsize, start)
-    self._peakrate = args.get('peakrate', baserate)
+    self._peakrate = args.get('peakrate', baserate)*1000
     self._basedt = duration*1000
-    self._baserate = baserate
-    self._peakdt = args.get('peakduration', duration)
+    self._baserate = self.rate
+    self._peakdt = args.get('peakduration', duration)*1000
     self.state = self.Idle
     self.n = 0
     self.N = 0
     self.pkts = 0
 
   def start(self, env:Engine, sta):
-    TrafficGen.start(self, e, sta)
+    TrafficGen.start(self, env, sta)
     self._finish = self.env.now + random.expovariate(1 / self._basedt)
 
   def run(self, e, args):
-    TrafficGen.run(self, e, args)
+    RateTrafficGen.run(self, e, args)
     self.__fsm__(e)
     
-  def __gen_frame__(self):
-    RateTrafficGen.__gen_frame__(self)
-    self.pkts += 1
-
   def __fsm__(self, e):
     'FSM para a geração de quadros: estados Idle (normal) e Burst (rajada)'
+    # print(self.env.now/1000, self.state, self._finish/1000, self.curr_rate/1000, self._octets, self.env.now-self.startTime)
     if self.state == self.Idle:
       if self.env.now >= self._finish:
         self.state = self.Burst
+        self._octets = 0
         self.startTime = self.env.now
         self.rate = self._peakrate
         self._finish = self.env.now + random.expovariate(1/self._peakdt)
     elif self.state == self.Burst:
       if self.env.now >= self._finish:
         self.state = self.Idle
+        self._octets = 0
         self.startTime = self.env.now
         self.rate = self._baserate
         self._finish = self.env.now + random.expovariate(1/self._basedt)
