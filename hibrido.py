@@ -903,9 +903,11 @@ if __name__ == '__main__':
     if args.base == 'ping':
         gen = PingGen(Um_Segundo, 64)
     elif args.base == 'bursty':
-        gen = TrafficGen(args.minperiod*1000/args.fator, args.maxperiod*1000/args.fator, args.minsize, args.maxsize)
+        gen = BurstTrafficGen(args.datarate, args.minperiod, args.minsize, maxsize=args.maxsize,
+                             peakduration=args.maxperiod, peakrate=args.datarate*args.fator)
     else:
-        gen = TrafficGen(args.minperiod*1000, args.maxperiod*1000, args.minsize, args.maxsize)
+        gen = RateTrafficGen(args.datarate, args.minsize,
+                             maxsize=args.maxsize)
 
     # gen = TrafficGen(minT*fator, maxT * fator, 1500, 16384)
     nburst = args.nburst
@@ -927,7 +929,7 @@ if __name__ == '__main__':
       #   nconst -= 1
       else:
           gen = RateTrafficGen(args.datarate, args.minsize,
-                           args.maxsize, 1000)
+                           maxsize=args.maxsize, start=1000)
       sta = STA(env, args.rate, gen)
       sta.add_base(base, random.uniform(args.range/2, args.range))
       base.add_sta(sta)
