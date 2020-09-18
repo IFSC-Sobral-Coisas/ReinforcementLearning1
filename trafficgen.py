@@ -7,7 +7,7 @@ class TrafficGen:
   - gera quadros com tamanhos uniformemente
   - intervalos entre quqadros também são uniformemente distribuidos'''
 
-  def __init__(self, minperiod:int, maxperiod:int, minsize:int, maxsize:int, start:int=0):
+  def __init__(self, minperiod:int, minsize:int, **args):
     '''
     Construtor
     :param minperiod: menor intervalo entre dois quadros
@@ -17,14 +17,14 @@ class TrafficGen:
     :param start: instante para iniciar a geração de quadros (default: 0)
     '''
     self.minT = minperiod
-    self.maxT = maxperiod
+    self.maxT = args.get('maxperiod', minperiod)
     self.minL = minsize
-    self.maxL = maxsize
+    self.maxL = args.get('maxsize', minsize)
+    self.maxL = max(self.maxL, self.minL)
+    self.startTime = args.get('start', 0)
     self.app = None
     self.pkts = 0
-    if start >= 0:
-      self.startTime = start
-    else:
+    if self.startTime < 0:
       self.startTime = random.randint(0, maxperiod)
 
   def start(self, env:Engine, sta):
@@ -95,7 +95,7 @@ class RateTrafficGen(TrafficGen):
   Gerador de tráfego a taxa constante
   '''
 
-  def __init__(self, rate:int, minsize:int, maxsize:int=0, start:int=0):
+  def __init__(self, rate:int, minsize:int, **args):
     '''
     Construtor
     :param rate: a taxa de dados do fluxo de quadros, dada em kBps
@@ -103,7 +103,7 @@ class RateTrafficGen(TrafficGen):
     :param maxsize: maior tamanho de quadro
     :param start: inicio da geração de quadros
     '''
-    TrafficGen.__init__(self, 0, 0, minsize, max(minsize, maxsize), start)
+    TrafficGen.__init__(self, 0, minsize, **args)
     self.rate = rate*1000
     self._octets = 0
 
@@ -127,7 +127,7 @@ class ConstantTrafficGen(TrafficGen):
 
   'Gera quadros a intervalos constantes. Os quadros podem ter tamanhos variáveis'
 
-  def __init__(self, interval:int, minsize:int, maxsize:int=0, start:int=0):
+  def __init__(self, interval:int, minsize:int, **args):
     '''
     Construtor
     :param interval: intervalo entre quadros
@@ -135,20 +135,20 @@ class ConstantTrafficGen(TrafficGen):
     :param maxsize: maior tamanho de quadro
     :param start: inicio da geração
     '''
-    TrafficGen.__init__(self, interval, interval, minsize, max(minsize, maxsize), start)
+    TrafficGen.__init__(self, interval, minsize, **args)
 
 class PingGen(ConstantTrafficGen):
 
   'Gera quadros periódicos do tipo "ping"'
 
-  def __init__(self, interval:int=1000, size:int=80, start=0):
+  def __init__(self, interval:int=1000, size:int=80, **args):
     '''
     Construtor
     :param interval: intervalo entre PINGs, em ms (default: 1000 ms)
     :param size: tananho do PING (default: 80 octetos)
     :param start: primeira geração de ping
     '''
-    ConstantTrafficGen.__init__(self, interval*1000, size, size, start)
+    ConstantTrafficGen.__init__(self, interval*1000, size, **args)
     self.app = App.PingReq
 
 class BurstTrafficGen(RateTrafficGen):
@@ -176,7 +176,7 @@ class BurstTrafficGen(RateTrafficGen):
     '''
     maxsize = args.get('maxsize', minsize)
     start = args.get('start', 0)
-    RateTrafficGen.__init__(self, baserate, minsize, maxsize, start)
+    RateTrafficGen.__init__(self, baserate, minsize, **args)
     self._peakrate = args.get('peakrate', baserate)*1000
     self._basedt = duration*1000
     self._baserate = self.rate
