@@ -88,6 +88,7 @@ class STA:
          self.action = None
          self.u = 0
          self.ru = 0
+         self.octets = 0
          self.N = 0
          self.n = 0
          self.ifs = STA.IFS
@@ -100,6 +101,7 @@ class STA:
          self.timeouts = {}
          self.seqno = 0
          self.rx_sta = {}
+         self._mode = Modo.CSMA
          self.fsm = self.fsm_csma
          self.handle_frame = self.handle_frame_csma
          self.last_tx_int = 0
@@ -140,6 +142,10 @@ class STA:
          self._t0 = self.env.now
          return rate
 
+     @property
+     def curr_rate(self)->int:
+         return 8*self.octets/self.env.now
+
      def __last_tx_interval__(self):
          if self.last_tx_int:
             dt = self.env.now - self.last_tx_int
@@ -159,12 +165,14 @@ class STA:
 
      def __switch_csma__(self):
          # print(self, '---> CSMA')
+         self._mode = Modo.CSMA
          self.fsm = self.fsm_csma
          self.handle_frame = self.handle_frame_csma
          self.state = Estado.Idle
 
      def __switch_tdma__(self):
-         # print(self, '---> TDMA')
+         # print(self.env.now, self, '---> TDMA')
+         self._mode = Modo.TDMA
          self.fsm = self.fsm_tdma
          self.handle_frame = self.handle_frame_tdma
          self.state = Estado.Idle
@@ -253,6 +261,7 @@ class STA:
 
      def start_backoff(self, cnt=None):
          if cnt != None:
+             print('colisao:', self.env.now, self, self._mode, self.cols)
              self.boff_cnt = cnt
              delay = self.IFS
              self.cols += 1
@@ -462,10 +471,12 @@ class STA:
              self.__cancel_timeout__(Timeout.Frame)
              self.ru += (self._last_tx.dt - self.Overhead - self.ifs)
              self.N += 1
+             self.octets += self._last_tx.size
              self._frames += 1
              self.__add_timeout__(Timeout.Frame, ev.dt, self.timeout)
              self.state = Estado.BA_Wait
          elif ev.kind == ev.Timeout:
+             print('tout espera BA')
              self.cols += 1
              self.send_frame(self._last_tx)
          elif ev.kind == ev.PollTimeout: # acabou timeslot
@@ -478,7 +489,7 @@ class STA:
            self._frames += 1
            self.__send_poll__(self.base)
          elif ev.kind == ev.Timeout:       # envio de DATA
-             self.cols += 1
+             # self.cols += 1
              self.__send_poll__(self.base)
 
        elif self.state == Estado.BA_Wait:
@@ -563,7 +574,6 @@ class STA:
          elif ev.kind == ev.BA:
              self.__cancel_timeout__(Timeout.Ack)
              if ev.dest == self:
-                 self._frames += 1
                  self.state = Estado.BA_Wait
                  self.__add_timeout__(Timeout.Frame, ev.dt, self.timeout)
              else:
@@ -575,8 +585,10 @@ class STA:
            if ev.kind == ev.Timeout:
                frame_len = self._last_tx.dt - self.Overhead
                # print('%d %s: len=%d us, qlen=%d' % (self.__last_tx_interval__(), self.state, frame_len, len(self.queue)))
+               self._frames += 1
                self.ru += frame_len
                self.N += 1
+               self.octets += self._last_tx.size
                self.state = Estado.BoffOk
                self.start_backoff(self.cwmin)
            elif ev.kind == ev.DATA:
@@ -637,6 +649,7 @@ class Base(STA):
          return 2*(self.SIFS + dest.range + self.__airtime__(self.ACK_size))
 
      def __send_frame__(self, q:Frame, dt:int=0):
+         # print('send_frame', self.env.now)
          random.shuffle(self._stas)
          for sta in self._stas:
              fr = Frame(q.kind, q.dt, sta, self)
@@ -796,9 +809,11 @@ class Base(STA):
              self.ru += (self._last_tx.dt - self.Overhead)
              self.N += 1
              self._frames += 1
+             self.octets += self._last_tx.size
              self.__add_timeout__(Timeout.Frame, ev.dt, self.timeout)
              self.state = Estado.BA_Wait
            elif ev.kind == ev.Timeout:
+               print('wait: timeout espera por BA')
                self.cols += 1
                self.send_frame(self._last_tx)
            elif ev.kind == ev.PollTimeout:
@@ -819,7 +834,7 @@ class Base(STA):
                self.state = Estado.POLL_END
 
 ######################################################################
-Um_Segundo = 1000000
+Um_Segundo = 1000
 Debug = False
 
 def pps(nsta, baseT, nburst, fator):
@@ -830,6 +845,7 @@ def pps(nsta, baseT, nburst, fator):
 
 if __name__ == '__main__':
     Rate = 150 # 150 Mbps
+    CpeRate = 1000
     Range = 5000 # 5000 m entre base e sta
     Nstas = 15 # qtde de estações
     Tempo = 100
@@ -865,8 +881,10 @@ if __name__ == '__main__':
                         default=Minperiod)
     parser.add_argument('-P', '--maxperiod', help='maior periodo entre quadros , em milissegundos (default=%d)' % Maxperiod, type=int, dest='maxperiod', required=False,
                         default=Maxperiod)
-    parser.add_argument('-r', '--rate', help='Taxa de dados, em Mbps (default=%d)' % Rate, type=int, dest='rate', required=False,
+    parser.add_argument('-R', '--rate', help='Taxa de dados do canal sem-fio, em Mbps (default=%d)' % Rate, type=int, dest='rate', required=False,
                         default=Rate)
+    parser.add_argument('-r', '--datarate', help='Taxa de dados do gerador de tráfego, em kBps (default=%d)' % CpeRate, type=int, dest='datarate', required=False,
+                        default=CpeRate)
     parser.add_argument('--tdma', help='Modo TDMA (default: CSMA)', dest='tdma', required=False,
                         action='store_true')
     parser.add_argument('--csma', help='Modo CSMA (isto já é o default ...)', dest='tdma', required=False,
@@ -896,8 +914,9 @@ if __name__ == '__main__':
     for x in range(args.nstas):
       if nburst > 0:
          # gen = BurstTrafficGen(50000, 150000, 8, 1500, 32768)
-         gen = BurstTrafficGen(args.minperiod, 1000, args.minsize,
-                               maxsize=args.maxsize, peakduration=300, peakrate=4000)
+         gen = BurstTrafficGen(args.datarate, args.minperiod, args.minsize,
+                               maxsize=args.maxsize, peakduration=args.maxperiod, peakrate=args.datarate*args.fator,
+                               start=1000)
          # gen = TrafficGen(args.minperiod * 1000/args.fator, args.maxperiod * 1000/args.fator, args.minsize, args.maxsize)
          nburst -= 1
       elif nping > 0:
@@ -907,8 +926,8 @@ if __name__ == '__main__':
       #   gen = ConstantTrafficGen(20000, 200,65536)
       #   nconst -= 1
       else:
-          gen = RateTrafficGen(args.minperiod, args.minsize,
-                           maxsize=args.maxsize)
+          gen = RateTrafficGen(args.datarate, args.minsize,
+                           args.maxsize, 1000)
       sta = STA(env, args.rate, gen)
       sta.add_base(base, random.uniform(args.range/2, args.range))
       base.add_sta(sta)
@@ -931,14 +950,17 @@ if __name__ == '__main__':
         nping += 1
     else:
         alat,mlat,Mlat = 0,0,0
-    if Debug or args.verbose: print('\n\nBase:', base.n, len(base.queue), base.N, base.data_rate(tempo), alat,mlat,Mlat)
+    if Debug or args.verbose: print('\n\nBase:', base.n, len(base.queue), base.N, base.curr_rate, alat,mlat,Mlat)
+    # if Debug or args.verbose: print('\n\nBase:', base.n, len(base.queue), base.N, base.data_rate(tempo), alat,mlat,Mlat)
     # print('\n\nBase:', base.data_rate(Tempo), base.n, base.N, len(base.queue), alat,mlat,Mlat)
     lats = [Mlat]
     qm = len(base.queue)
     lost = base.ping_lat.lost
+    rates = 0
     for sta in base.get_stations():
       tu += sta.u
       tru += sta.ru
+      rates += sta.curr_rate
       tr += sta.data_rate(tempo)
       lat = (0,0,0)
       try:
@@ -953,11 +975,13 @@ if __name__ == '__main__':
           # print(sta, e)
           pass
       qm += len(sta.queue)
-      if Debug or args.verbose: print(sta, sta.n, len(sta.queue), sta.N, sta.data_rate(tempo), lat[0], lat[1], lat[2])
+      if Debug or args.verbose: print(sta, sta.n, len(sta.queue), sta.N, sta.curr_rate, sta.cols, lat[0], lat[1], lat[2])
+      # if Debug or args.verbose: print(sta, sta.n, len(sta.queue), sta.N, sta.data_rate(tempo), lat[0], lat[1], lat[2])
       # if lat[0]: print(sta, sta.data_rate(tempo), sta.n, sta.N, len(sta.queue), sta.cols, lat[0], lat[1], lat[2])
       # else: print(sta, sta.data_rate(tempo), sta.n, sta.N, len(sta.queue), sta.cols)
     lats.sort()
-    print('modo=%s, pps=%d, vazão média=%d, latências: média=%d, mín=%d, max=%d, perdas=%d' % (base.mode.name, base.currpps, tr, alat/nping, mlat/nping, Mlat/nping, lost))
+    print('modo=%s, pps=%d, vazão média=%.2f, latências: média=%d, mín=%d, max=%d, perdas=%d' % (base.mode.name, base.currpps, rates, alat/nping, mlat/nping, Mlat/nping, lost))
+    # print('modo=%s, pps=%d, vazão média=%.2f, latências: média=%d, mín=%d, max=%d, perdas=%d' % (base.mode.name, base.currpps, tr, alat/nping, mlat/nping, Mlat/nping, lost))
     # alat,mlat,Mlat = base.lat.valores
     # for sta in base.get_stations():
     #     a,m,M = sta.lat.valores

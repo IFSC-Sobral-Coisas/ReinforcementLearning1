@@ -21,7 +21,8 @@ class TrafficGen:
     self.minL = minsize
     self.maxL = maxsize
     self.app = None
-    if start:
+    self.pkts = 0
+    if start >= 0:
       self.startTime = start
     else:
       self.startTime = random.randint(0, maxperiod)
@@ -51,6 +52,7 @@ class TrafficGen:
     ev.app = self.app
     ev.t0 = self.env.now
     ev.size = size
+    self.pkts += 1
     self.sta.handle_frame(ev)
     return ev
 
@@ -118,7 +120,7 @@ class RateTrafficGen(TrafficGen):
     e = self.__gen_frame__()
 
     self._octets += e.size
-    T = max(1e6*e.size/self.rate, 1e6*self._octets/self.rate - self.env.now)
+    T = max(1e6*e.size/self.rate, 1e6*self._octets/self.rate + self.startTime - self.env.now)
     self.__add_timeout__(T, self.run)
 
 class ConstantTrafficGen(TrafficGen):
