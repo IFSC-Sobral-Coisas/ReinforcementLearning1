@@ -121,7 +121,7 @@ class RateTrafficGen(TrafficGen):
     T = max(1e6*e.size/self.rate, 1e6*self._octets/self.rate - self.env.now)
     self.__add_timeout__(T, self.run)
 
-class ConstantTrafficGen(RateTrafficGen):
+class ConstantTrafficGen(TrafficGen):
 
   'Gera quadros a intervalos constantes. Os quadros podem ter tamanhos variáveis'
 
