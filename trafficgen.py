@@ -217,6 +217,7 @@ class BurstTrafficGen(RateTrafficGen):
     if self._silence:
       dt = random.expovariate(1/self._silence)
       self.startTime += dt
+      self._finish += dt
       self.__add_timeout__(dt, self.run)
       return True
     return False
