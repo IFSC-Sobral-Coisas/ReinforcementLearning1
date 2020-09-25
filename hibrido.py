@@ -916,7 +916,7 @@ if __name__ == '__main__':
     for x in range(args.nstas):
       if nburst > 0:
          # gen = BurstTrafficGen(50000, 150000, 8, 1500, 32768)
-         gen = BurstTrafficGen(args.datarate, args.minperiod, args.minsize,
+         gen = VariableTrafficGen(args.datarate, args.minperiod, args.minsize,
                                maxsize=args.maxsize, peakduration=args.maxperiod, peakrate=args.datarate*args.fator,
                                start=1000)
          # gen = TrafficGen(args.minperiod * 1000/args.fator, args.maxperiod * 1000/args.fator, args.minsize, args.maxsize)

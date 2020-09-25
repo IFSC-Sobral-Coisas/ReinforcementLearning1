@@ -4,8 +4,8 @@ from ptmputil import Frame,App
 
 class TrafficGen:
   '''Gerador de tráfego básico:
-  - gera quadros com tamanhos uniformemente
-  - intervalos entre quqadros também são uniformemente distribuidos'''
+  - gera quadros com tamanhos uniformemente distribuídos
+  - intervalos entre quadros também são uniformemente distribuidos'''
 
   def __init__(self, minperiod:int, minsize:int, **args):
     '''
@@ -154,7 +154,8 @@ class PingGen(ConstantTrafficGen):
 class BurstTrafficGen(RateTrafficGen):
 
   '''Gerador de tráfego em rajada: gera quadros em grupos
-  Gera quadros com taxa básica, e ocasionalmente gera quadros com taxa de pico'''
+  Gera quadros com taxa básica, e ocasionalmente gera quadros com taxa de pico
+  Durações dos intervalos distribuidas exponencialmente'''
 
   Burst = 1
   Idle = 0
@@ -171,6 +172,8 @@ class BurstTrafficGen(RateTrafficGen):
           taxa de pico
         * *peakduration* (``int``) --
           duração da rajada
+        * *silence* (``int``) --
+          duração do silêncio após rajada ou normal (expo)
         * *start* (``int``) --
           início da geração de quadros
     '''
@@ -181,6 +184,7 @@ class BurstTrafficGen(RateTrafficGen):
     self._basedt = duration*1000
     self._baserate = self.rate
     self._peakdt = args.get('peakduration', duration)*1000
+    self._silence = args.get('silence', 0)*1000
     self.state = self.Idle
     self.n = 0
     self.N = 0
@@ -190,25 +194,89 @@ class BurstTrafficGen(RateTrafficGen):
     TrafficGen.start(self, env, sta)
     self._finish = self.env.now + random.expovariate(1 / self._basedt)
 
-  def run(self, e, args):
-    RateTrafficGen.run(self, e, args)
-    self.__fsm__(e)
-    
-  def __fsm__(self, e):
+  # def run(self, e, args):
+  #   RateTrafficGen.run(self, e, args)
+  #   self.__fsm__(e)
+
+  @property
+  def peakrate(self):
+    return self._peakrate
+
+  @property
+  def baserate(self):
+    return self._baserate
+
+  def __change_rate__(self, rate:int, dt:int)->bool:
+    '''Programa próximo intervalo de transmissão. Retorna True se agendou intervalo
+    de silêncio'''
+    self._octets = 0
+    self.startTime = self.env.now
+    self.rate = rate
+    # duração do intervalo distribuido exponencialmente
+    self._finish = self.env.now + random.expovariate(1 / dt)
+    if self._silence:
+      dt = random.expovariate(1/self._silence)
+      self.startTime += dt
+      self.__add_timeout__(dt, self.run)
+      return True
+    return False
+
+  def run(self, e:Event, args):
     'FSM para a geração de quadros: estados Idle (normal) e Burst (rajada)'
     # print(self.env.now/1000, self.state, self._finish/1000, self.curr_rate/1000, self._octets, self.env.now-self.startTime)
     if self.state == self.Idle:
       if self.env.now >= self._finish:
         self.state = self.Burst
-        self._octets = 0
-        self.startTime = self.env.now
-        self.rate = self._peakrate
-        self._finish = self.env.now + random.expovariate(1/self._peakdt)
+        if self.__change_rate__(self.peakrate, self._peakdt):
+          'Agendou intervalo de silêncio ... não gera próximo quadro agora'
+          return
     elif self.state == self.Burst:
       if self.env.now >= self._finish:
         self.state = self.Idle
-        self._octets = 0
-        self.startTime = self.env.now
-        self.rate = self._baserate
-        self._finish = self.env.now + random.expovariate(1/self._basedt)
+        if self.__change_rate__(self.baserate, self._basedt):
+          'Agendou intervalo de silêncio ... não gera próximo quadro agora'
+          return
+    RateTrafficGen.run(self, e, args)
 
+
+
+class VariableTrafficGen(BurstTrafficGen):
+  '''Gerador de tráfego em rajadas variáveis: gera quadros em grupos com taxas variáveis
+  Gera quadros com taxa básica variável, e ocasionalmente gera quadros com taxa de pico
+  também variável. Essas taxas são distribuídas uniformemente.
+  Durações dos intervalos distribuidas exponencialmente'''
+
+  Burst = 1
+  Idle = 0
+  IFS = 2  # 2 us
+
+  def __init__(self, baserate: int, duration: int, minsize: int, **args):
+    '''
+    Construtor
+    :param baserate: taxa de dados do fluxo normal, em Bps
+    :param duration: duração do fluxo normal, em ms
+    :param minsize: menor tamanho de quadro
+    :param args: argumentos opcionais:
+        * *maxbaserate* (``int``) --
+          maior taxa de dados normal possível
+        * *peakrate* (``int``) --
+          taxa de pico
+        * *maxpeakrate* (``int``) --
+          maior taxa de pico possível
+        * *peakduration* (``int``) --
+          duração da rajada
+        * *start* (``int``) --
+          início da geração de quadros
+    '''
+    BurstTrafficGen.__init__(self, baserate, duration, minsize, **args)
+    self._maxbaserate = args.get('maxbaserate', self._baserate)
+    self._maxpeakrate = args.get('maxpeakrate', self._peakrate)
+    self.rate = random.uniform(self._baserate, self._maxbaserate)
+
+  @property
+  def peakrate(self):
+    return random.uniform(self._peakrate, self._maxpeakrate)
+
+  @property
+  def baserate(self):
+    return random.uniform(self._baserate, self._maxbaserate)
