@@ -79,10 +79,37 @@ class MacAdaptativo(Model):
     def next(self, s:State)->State:
         pass
 
+class Controller:
+
+		def __init__(self, model:Model, algorithm:Sarsa, base, step, engine):
+				self.model = model
+				self.algorithm = algorithm
+				self.base = base
+				self.step = step
+				self.time = step
+				self.engine = engine
+
+		# retorna uma ação avaliada pelo algoritmo do controlador
+		def action(self):
+				s,a = algorithm.evaluate(self.currstate())
+				base.set_mode(a.n)
+				self.time += self.step
+
+		# retorna o estado atual do controlador
+		def currstate(self):
+				return model.currstate
+
+		# executa a simulação
+		def run(self, tfinal):
+				while self.time <= tfinal:
+						self.engine.run(self.time)
+						self.action
+
 if __name__ == '__main__':
     import time
 
     Rate = 150 # 150 Mbps
+    CpeRate = 1000
     Range = 5000 # 5000 m entre base e sta
     Nstas = 15 # qtde de estações
     Tempo = 100
@@ -120,8 +147,10 @@ if __name__ == '__main__':
                         default=Minperiod)
     parser.add_argument('-P', '--maxperiod', help='maior periodo entre quadros , em milissegundos (default=%d)' % Maxperiod, type=int, dest='maxperiod', required=False,
                         default=Maxperiod)
-    parser.add_argument('-r', '--rate', help='Taxa de dados, em Mbps (default=%d)' % Rate, type=int, dest='rate', required=False,
+    parser.add_argument('-R', '--rate', help='Taxa de dados, em Mbps (default=%d)' % Rate, type=int, dest='rate', required=False,
                         default=Rate)
+    parser.add_argument('-r', '--datarate', help='Taxa de dados do gerador de tráfego, em kBps (default=%d)' % CpeRate, type=int, dest='datarate', required=False,
+                        default=CpeRate)
     parser.add_argument('-T', '--step', help='Duração de episódios do RL, em milissegundos (default=%d)' % Step, type=int, dest='step', required=False,
                         default=Step)
     parser.add_argument('--ppsinc', help='Granularidade do PPS para o RL (default=%d)' % MacAdaptativo.PPS_Inc, type=int, dest='pps_inc', required=False,
@@ -152,9 +181,11 @@ if __name__ == '__main__':
     if args.base == 'ping':
         gen = PingGen(Um_Segundo, 64)
     elif args.base == 'bursty':
-        gen = TrafficGen(args.minperiod*1000/args.fator, args.maxperiod*1000/args.fator, args.minsize, args.maxsize)
+        gen = BurstTrafficGen(args.datarate, args.minperiod, args.minsize, maxsize=args.maxsize,
+                             peakduration=args.maxperiod, peakrate=args.datarate*args.fator)
     else:
-        gen = TrafficGen(args.minperiod*1000, args.maxperiod*1000, args.minsize, args.maxsize)
+        gen = RateTrafficGen(args.datarate, args.minsize,
+                             maxsize=args.maxsize)
 
     # gen = TrafficGen(minT*fator, maxT * fator, 1500, 16384)
     # cria os geradores de tráfego dos clientes
@@ -166,7 +197,9 @@ if __name__ == '__main__':
     for x in range(args.nstas):
       if nburst > 0:
          # gen = BurstTrafficGen(50000, 150000, 8, 1500, 32768)
-         gen = TrafficGen(args.minperiod * 1000/args.fator, args.maxperiod * 1000/args.fator, args.minsize, args.maxsize)
+         gen = VariableTrafficGen(args.datarate, args.minperiod, args.minsize,
+                               maxsize=args.maxsize, peakduration=args.maxperiod, peakrate=args.datarate*args.fator,
+                               start=1000)
          nburst -= 1
       elif nping > 0:
           nping -= 1
@@ -175,8 +208,8 @@ if __name__ == '__main__':
       #   gen = ConstantTrafficGen(20000, 200,65536)
       #   nconst -= 1
       else:
-          gen = TrafficGen(args.minperiod * 1000, args.maxperiod * 1000, args.minsize,
-                           args.maxsize)
+          gen = RateTrafficGen(args.datarate, args.minsize,
+                           maxsize=args.maxsize, start=1000)
       sta = STA(env, args.rate, gen)
       sta.add_base(base, random.uniform(args.range/2, args.range))
       base.add_sta(sta)

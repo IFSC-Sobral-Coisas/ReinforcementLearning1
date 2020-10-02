@@ -261,7 +261,6 @@ class STA:
 
      def start_backoff(self, cnt=None):
          if cnt != None:
-             print('colisao:', self.env.now, self, self._mode, self.cols)
              self.boff_cnt = cnt
              delay = self.IFS
              self.cols += 1
