@@ -1,17 +1,18 @@
-from sarsa import State,Action,Model,Sarsa,QLearn,ExpSarsa
+from sarsa import State, Action, Model, Sarsa, QLearn, ExpSarsa
 from typing import Tuple
-from hibrido import STA,Base,Modo
+from hibrido import STA, Base, Modo
 from trafficgen import *
 import math
 from mysim import Engine
 import argparse
+
 
 class MacAdaptativo(Model):
     PPS_Inc = 10
     PPS_Max = 2000
     Alfa = 0.5
 
-    def __init__(self, base:Base, **args):
+    def __init__(self, base: Base, **args):
         '''
         :param base: a base da rede ptmp
         :param args: argumentos opcionais:
@@ -34,24 +35,24 @@ class MacAdaptativo(Model):
     def __initialize__(self):
         for pps in range(0, self._ppsmax, self._ppsinc):
             for n in range(1, 1+self._base.num_clients):
-                val = (pps,n)
+                val = (pps, n)
                 s = State(val)
                 s.add_action(Action(Modo.TDMA))
                 s.add_action(Action(Modo.CSMA))
                 self.states[val] = s
 
-    def __calc_pps__(self, pps:int)->int:
+    def __calc_pps__(self, pps: int) -> int:
         return min(math.floor(pps/self._ppsinc)*self._ppsinc, self._ppsmax)
 
     @property
-    def currstate(self)->State:
+    def currstate(self) -> State:
         try:
             pps = self.__calc_pps__(self._base.currpps)
         except:
             pps = 0
-        return self.states[(pps,self._base.num_clients)]
+        return self.states[(pps, self._base.num_clients)]
 
-    def evaluate(self, s:State, a:Action)->Tuple[float,State]:
+    def evaluate(self, s: State, a: Action) -> Tuple[float, State]:
         pps = self._base.frames - self._frames
         lost = self._base.cols - self._lost
         self._lost = self._base.cols
@@ -70,48 +71,46 @@ class MacAdaptativo(Model):
         # calcula PPS médio
         self._rate = pps*self._alfa + (1-self._alfa)*self._rate
         rate = self.__calc_pps__(self._rate)
-        n = self._base.num_clients # normalmente não muda, mas deve-se considerar uma rede em que cpes variam
-        stt = self.states[(rate,n)]
+        # normalmente não muda, mas deve-se considerar uma rede em que cpes variam
+        n = self._base.num_clients
+        stt = self.states[(rate, n)]
         # print('eval:', s.n, stt.n, pps, s.amax.n.name, r, lat)
-        return r,stt
+        return r, stt
 
-
-    def next(self, s:State)->State:
+    def next(self, s: State) -> State:
         pass
+
 
 class Controller:
 
-		def __init__(self, model:Model, algorithm:Sarsa, base, step, engine):
-				self.model = model
-				self.algorithm = algorithm
-				self.base = base
-				self.step = step
-				self.time = step
-				self.engine = engine
+    def __init__(self, model: Model, algorithm: Sarsa, base, step, engine: Engine):
+        self.model = model
+        self.algorithm = algorithm
+        self.base = base
+        self.step = step
+        self.time = step
+        self.engine = engine
 
-		# retorna uma ação avaliada pelo algoritmo do controlador
-		def action(self):
-				s,a = algorithm.evaluate(self.currstate())
-				base.set_mode(a.n)
-				self.time += self.step
+    # retorna uma ação avaliada pelo algoritmo do controlador
+    def action(self):
+        s, a = self.algorithm.evaluate(self.model.currstate)
+        base.set_mode(a.n)
+        self.time += self.step
 
-		# retorna o estado atual do controlador
-		def currstate(self):
-				return model.currstate
+    # executa a simulação
+    def run(self, tfinal):
+        while self.time <= tfinal:
+            self.engine.run(self.time)
+            self.action()
 
-		# executa a simulação
-		def run(self, tfinal):
-				while self.time <= tfinal:
-						self.engine.run(self.time)
-						self.action
 
 if __name__ == '__main__':
     import time
 
-    Rate = 150 # 150 Mbps
+    Rate = 150  # 150 Mbps
     CpeRate = 1000
-    Range = 5000 # 5000 m entre base e sta
-    Nstas = 15 # qtde de estações
+    Range = 5000  # 5000 m entre base e sta
+    Nstas = 15  # qtde de estações
     Tempo = 100
     Minsize = 1500
     Maxsize = 16384
@@ -124,7 +123,8 @@ if __name__ == '__main__':
     Um_Segundo = 1000000
     Debug = False
 
-    parser = argparse.ArgumentParser(description='Simulador 802.11n híbrido, com Aprendizagem por Reforço')
+    parser = argparse.ArgumentParser(
+        description='Simulador 802.11n híbrido, com Aprendizagem por Reforço')
     parser.add_argument('-n', '--cpes', help='quamtidade de cpes (default=%d)' % Nstas, type=int, dest='nstas', required=False,
                         default=Nstas)
     parser.add_argument('-t', '--len', help='duração da simulação em segundos (default=%d)' % Tempo, type=int, dest='t', required=False,
@@ -137,7 +137,7 @@ if __name__ == '__main__':
                         default=Nburst)
     parser.add_argument('-l', '--ping', help='qtde de cpes que fazem ping (default=%d)' % Nping, type=int, dest='nping', required=False,
                         default=Nping)
-    parser.add_argument('-B', '--base', help='padrão de tráfego da base (default=ping)', type=str, dest='base', choices=('ping','bursty','normal'),
+    parser.add_argument('-B', '--base', help='padrão de tráfego da base (default=ping)', type=str, dest='base', choices=('ping', 'bursty', 'normal'),
                         required=False, default='ping')
     parser.add_argument('-m', '--minsize', help='menor tamanho de quadro (default=%d)' % Minsize, type=int, dest='minsize', required=False,
                         default=Minsize)
@@ -165,9 +165,12 @@ if __name__ == '__main__':
                         default=Sarsa.Gamma)
     parser.add_argument('--beta', help='Valor de beta, para EWMA do PPS (default=%.1f)' % MacAdaptativo.Alfa, type=float, dest='beta', required=False,
                         default=MacAdaptativo.Alfa)
-    parser.add_argument('--debug', help='Ativa debug', dest='debug', required=False, action='store_true')
-    parser.add_argument('--policy', help='Mostra policy ao final', dest='policy', required=False, action='store_true')
-    parser.add_argument('-v', help='Verbose: mostra resultados por cpe', dest='verbose', required=False, action='store_true')
+    parser.add_argument('--debug', help='Ativa debug',
+                        dest='debug', required=False, action='store_true')
+    parser.add_argument('--policy', help='Mostra policy ao final',
+                        dest='policy', required=False, action='store_true')
+    parser.add_argument('-v', help='Verbose: mostra resultados por cpe',
+                        dest='verbose', required=False, action='store_true')
 
     args = parser.parse_args()
 
@@ -182,7 +185,7 @@ if __name__ == '__main__':
         gen = PingGen(Um_Segundo, 64)
     elif args.base == 'bursty':
         gen = BurstTrafficGen(args.datarate, args.minperiod, args.minsize, maxsize=args.maxsize,
-                             peakduration=args.maxperiod, peakrate=args.datarate*args.fator)
+                              peakduration=args.maxperiod, peakrate=args.datarate*args.fator)
     else:
         gen = RateTrafficGen(args.datarate, args.minsize,
                              maxsize=args.maxsize)
@@ -195,25 +198,25 @@ if __name__ == '__main__':
     nping = args.nping
     base = Base(env, args.rate, gen)
     for x in range(args.nstas):
-      if nburst > 0:
-         # gen = BurstTrafficGen(50000, 150000, 8, 1500, 32768)
-         gen = VariableTrafficGen(args.datarate, args.minperiod, args.minsize,
-                               maxsize=args.maxsize, peakduration=args.maxperiod, peakrate=args.datarate*args.fator,
-                               start=1000)
-         nburst -= 1
-      elif nping > 0:
-          nping -= 1
-          gen = PingGen(Um_Segundo, 64)
-      # elif nconst > 0:
-      #   gen = ConstantTrafficGen(20000, 200,65536)
-      #   nconst -= 1
-      else:
-          gen = RateTrafficGen(args.datarate, args.minsize,
-                           maxsize=args.maxsize, start=1000)
-      sta = STA(env, args.rate, gen)
-      sta.add_base(base, random.uniform(args.range/2, args.range))
-      base.add_sta(sta)
-      sta.start()
+        if nburst > 0:
+            # gen = BurstTrafficGen(50000, 150000, 8, 1500, 32768)
+            gen = VariableTrafficGen(args.datarate, args.minperiod, args.minsize,
+                                     maxsize=args.maxsize, peakduration=args.maxperiod, peakrate=args.datarate*args.fator,
+                                     start=1000)
+            nburst -= 1
+        elif nping > 0:
+            nping -= 1
+            gen = PingGen(Um_Segundo, 64)
+        # elif nconst > 0:
+        #   gen = ConstantTrafficGen(20000, 200,65536)
+        #   nconst -= 1
+        else:
+            gen = RateTrafficGen(args.datarate, args.minsize,
+                                 maxsize=args.maxsize, start=1000)
+        sta = STA(env, args.rate, gen)
+        sta.add_base(base, random.uniform(args.range/2, args.range))
+        base.add_sta(sta)
+        sta.start()
 
     # prepara para executar o simulador combinado com o controlador
     # de modo de operação
@@ -224,28 +227,36 @@ if __name__ == '__main__':
     base.start()
 
     # cria o modelo para o controlador
-    modelo = MacAdaptativo(base, pps_inc=args.pps_inc, pps_max=args.pps_max, alfa=args.beta, epsilon=args.epsilon)
+    modelo = MacAdaptativo(base, pps_inc=args.pps_inc,
+                           pps_max=args.pps_max, alfa=args.beta, epsilon=args.epsilon)
     # cria o algoritmo do controlador
     algo = ExpSarsa(modelo, gamma=args.gamma, alfa=args.alfa)
 
     # t0: tempo final deste intervalo de simulação (simulador executa até que tempo
     # de simulação chegue ao valor de "t0")
     # tfinal: tempo em que a simulação como um todo deve terminar
-    t0 = step
-    tfinal = tempo
 
-    # estado inicial do controlador
-    s = modelo.currstate
+    modelo = MacAdaptativo(base, pps_inc=args.pps_inc,
+                           pps_max=args.pps_max, alfa=args.beta, epsilon=args.epsilon)
+    algo = ExpSarsa(modelo, gamma=args.gamma, alfa=args.alfa)
+    c = Controller(modelo, algo, base, step, env)
+    c.run(tempo)
 
-    # executa o simulador
-    while t0 <= tfinal:
-        env.run(t0)
-        # chama o controlador, que informa a ação
-        # a ser executada ("a")
-        s,a = algo.evaluate(s)
-        base.set_mode(a.n)
-        # print(s.n, a)
-        t0 += step
+    # t0 = step
+    # tfinal = tempo
+
+    # # estado inicial do controlador
+    # s = modelo.currstate
+
+    # # executa o simulador
+    # while t0 <= tfinal:
+    #     env.run(t0)
+    #     # chama o controlador, que informa a ação
+    #     # a ser executada ("a")
+    #     s, a = algo.evaluate(s)
+    #     base.set_mode(a.n)
+    #     # print(s.n, a)
+    #     t0 += step
 
     # obtém as estatísticas da simulação
 
@@ -260,12 +271,14 @@ if __name__ == '__main__':
     # avalia as latências obtidas
     nping = 0
     if args.base == 'ping':
-        alat,mlat,Mlat = base.ping_lat.valores
+        alat, mlat, Mlat = base.ping_lat.valores
         nping += 1
     else:
-        alat,mlat,Mlat = 0,0,0
+        alat, mlat, Mlat = 0, 0, 0
 
-    if Debug or args.verbose: print('\n\nBase:', base.n, len(base.queue), base.N, base.data_rate(tempo), alat,mlat,Mlat)
+    if Debug or args.verbose:
+        print('\n\nBase:', base.n, len(base.queue), base.N,
+              base.data_rate(tempo), alat, mlat, Mlat)
     # print('\n\nBase:', base.data_rate(Tempo), base.n, base.N, len(base.queue), alat,mlat,Mlat)
 
     # atualiza valores de quadros transmitidos, taxa de dados efetiva e latẽncias
@@ -274,36 +287,39 @@ if __name__ == '__main__':
     qm = len(base.queue)
     lost = base.ping_lat.lost
     for sta in base.get_stations():
-      tu += sta.u
-      tru += sta.ru
-      tr += sta.data_rate(tempo)
-      lat = (0,0,0)
-      try:
-          lat = sta.ping_lat.valores
-          nping += 1
-          lost += sta.ping_lat.lost
-          alat += lat[0]
-          mlat += lat[1]
-          Mlat += lat[2]
-          lats.append(lat[2])
-      except Exception as e:
-          # print(sta, e)
-          pass
-      # quantidade de quadros que não foram transmitidos (em espera nas filas de saída)
-      qm += len(sta.queue)
-      if Debug or args.verbose: print(sta, sta.n, len(sta.queue), sta.N, sta.data_rate(tempo), lat[0], lat[1], lat[2])
+        tu += sta.u
+        tru += sta.ru
+        tr += sta.data_rate(tempo)
+        lat = (0, 0, 0)
+        try:
+            lat = sta.ping_lat.valores
+            nping += 1
+            lost += sta.ping_lat.lost
+            alat += lat[0]
+            mlat += lat[1]
+            Mlat += lat[2]
+            lats.append(lat[2])
+        except Exception as e:
+            # print(sta, e)
+            pass
+        # quantidade de quadros que não foram transmitidos (em espera nas filas de saída)
+        qm += len(sta.queue)
+        if Debug or args.verbose:
+            print(sta, sta.n, len(sta.queue), sta.N,
+                  sta.data_rate(tempo), lat[0], lat[1], lat[2])
 
     # mostra um sumário: PPS na base ao final da simulação, taxa de dados efetiva, latências média, mínima e máxima,
     # comprimento médio das filas de saída, contagem de quadros perdidos
     # OBS: latências de ping (se foi usado)
     if args.base == 'ping':
-        print(base.currpps, tr, alat/nping, mlat/nping, Mlat/nping, qm/args.nstas, lost)
+        print(base.currpps, tr, alat/nping, mlat /
+              nping, Mlat/nping, qm/args.nstas, lost)
     else:
         # sumariza as latências
         # de quadros em geral
-        alat,mlat,Mlat = base.lat.valores
+        alat, mlat, Mlat = base.lat.valores
         for sta in base.get_stations():
-            a,m,M = sta.lat.valores
+            a, m, M = sta.lat.valores
             alat += a
             mlat += m
             Mlat += M
@@ -315,13 +331,14 @@ if __name__ == '__main__':
 
     # mostra a policy
     if args.policy:
-       # para cada estado
-       for s in modelo.states.values():
+        # para cada estado
+        for s in modelo.states.values():
             n = 0
             # identifica as ações que foram efetivamente usadas
-            for a,p in s.policy_dist:
+            for a, p in s.policy_dist:
                 n += (a.count > 0)
-            if not n: continue
+            if not n:
+                continue
             # mostra a ação da policy (maior valor)
             print(s.n, s.amax.n.name, end=' ')
             # mostra todas as ações, com respectivos valores, probabilidades e contagens
