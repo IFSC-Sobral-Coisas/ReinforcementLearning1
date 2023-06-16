@@ -28,10 +28,8 @@ class RL0:
     def __best_action__(self):
         e = random.random()
         if e >= self.e:
-            #self.actions.sort(key=lambda a: a.qn)
-            #qn_max = self.actions[-1].qn
-            qn_max = max(map(lambda a: a.qn, self.actions))
-            l = list(filter(lambda a: a.qn == qn_max, self.actions))
+            a_greedy = max(self.actions, key=lambda a: a.qn)
+            l = [a for a in self.actions if a.qn == a_greedy.qn]
         else:
             l = self.actions
         return random.choice(l)

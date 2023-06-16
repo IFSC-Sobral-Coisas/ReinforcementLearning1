@@ -1,0 +1,17 @@
+Exercise 2.1 In ε-greedy action selection, for the case of two actions and ε = 0.5, what is
+the probability that the greedy action is selected? R: 0.75
+
+50% das vezes se seleciona a ação greedy, mas outras 50% das vezes se 
+seleciona aleatoriamente uma das ações, entre elas a ação greedy (com maior 
+Q(a)). Quando se seleciona aleatoriamente, a ação greedy tem chance de 50%
+de ser escolhida. Assim, essa ação com maior Q(a) será selecionada 75% 
+das vezes, como desmonstrado a seguir:
+
+Sendo p = 1-e, e n = número de ações:
+
+P_greedy = p + (1-p)*(1/n)
+
+Se e = 0.5 e n = 2 -> P_greedy = 0.5 + (1-0.5)*(1/2) = 0.5 + 0.5*0.5 = 0.75
+
+===========================================================================
+
