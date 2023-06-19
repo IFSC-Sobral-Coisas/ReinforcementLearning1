@@ -8,14 +8,20 @@ class Action:
     r = attr.ib(default=0) # recompensa
     n = attr.ib(default=0) # qtas vezes esta ação foi selecionada
     qn = attr.ib(default=0) # valor estimado
-
+    alfa = attr.ib(default=0)
+    
     @property
     def reward(self)->float:
         return random.normalvariate(self.r, self.s)
 
     def update(self, rn:float):
-        self.n += 1
-        self.qn += (rn - self.qn)/self.n
+        self.n += 1        
+        if self.alfa: alfa = self.alfa
+        else: alfa = 1/self.n
+        self.qn += (rn - self.qn)*alfa
+        
+    def next(self):
+      self.r += random.normalvariate(0, .01)
 
 # LearnStats: acumula as estatísticas de escolha de melhor ação ao longo da execução,
 # com intervalos dados por stepsize
@@ -53,10 +59,10 @@ class LearnStats:
     
 class RL0:
 
-    def __init__(self, N:int, e:float=0, decay:float=0):
+    def __init__(self, N:int, e:float=0, decay:float=0, alfa=-1):
         if N < 2: raise ValueError("N deve ser maior que 1 (ao menos duas ações)")
         if e < 0 or e > 1: raise ValueError('e deve estar no intervalo [0,1]')
-        self.actions = [Action(id=x, r=random.normalvariate(0,1), s=1, qn=5) for x in range(N)]
+        self.actions = [Action(id=x, r=random.normalvariate(0,1), s=1, qn=5, alfa=alfa) for x in range(N)]
         self.e = e
         self.decay = decay
 
@@ -85,6 +91,9 @@ class RL0:
             a.update(r)
             # atualiza epsilon
             self.e *= 1-self.decay
+            # perturba os valores das ações
+            for a in self.actions:
+              a.next()
         return nbest
 
 
@@ -96,10 +105,10 @@ class Testbed:
         self.e = e
         self.decay = decay
 
-    def run(self, runs=2000, runlen=1000, stepsize=10):
+    def run(self, runs=2000, runlen=1000, stepsize=10, alfa=0.1):
         stats = LearnStats.create(runlen, stepsize)
         for n in range(runs):
-            r = RL0(self.k, self.e, self.decay)
+            r = RL0(self.k, self.e, self.decay, alfa)
             res = r.learn(runlen, stepsize)
             stats.update(res)
         # normaliza os resultados, em função da quantidade de execuções E largura de intervalo de 
@@ -109,7 +118,8 @@ class Testbed:
 
 if __name__ == '__main__':
     K = 10
-    Decay = 0#5e-3
+    Decay = 0
+    Steps = 1000
     for e in [0]:
         print('running: ', e)
         t = Testbed(K, e, Decay)
