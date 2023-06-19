@@ -17,6 +17,40 @@ class Action:
         self.n += 1
         self.qn += (rn - self.qn)/self.n
 
+# LearnStats: acumula as estatísticas de escolha de melhor ação ao longo da execução,
+# com intervalos dados por stepsize
+@attr.s
+class LearnStats:
+  stats = attr.ib(factory=dict)
+  stepsize = attr.ib(default=10)
+  
+  @staticmethod
+  def create(n, stepsize):
+    d = {}
+    pos = 0
+    while pos < n:
+        d[pos] = 0
+        pos += stepsize
+    return LearnStats(d, stepsize)
+    
+  # acumula os resultados contidos em outra instancia de LearnStats
+  def update(self, other):
+    for k,v in other.stats.items():
+      self.stats[k] += v
+
+  # incrementa o contador de melhor ação selecionada, com respeito ao passo dado por "step"
+  def incr(self, step):
+    pos = int(step/self.stepsize)*self.stepsize
+    try:
+      self.stats[pos] += 1
+    except:
+      self.stats[pos] = 1
+      
+  # normaliza os resultados por um fator dado por 1/n
+  def norm(self, n):
+    for k in self.stats:
+      self.stats[k] /= n
+    
 class RL0:
 
     def __init__(self, N:int, e:float=0):
@@ -37,50 +71,36 @@ class RL0:
     def is_best(self, a:Action)->bool:
         return a.r >= max(map(lambda x: x.r, self.actions))
 
+    # executa o aprendizado: conta quantas vezes foi escolhida a melhor ação
+    # a cada intervalo de largura stepsize
     def learn(self, steps:int, stepsize:int=10)->dict:
-        nbest = {}
-        step = 0
-        while step < steps:
+        nbest = LearnStats.create(steps, stepsize)
+        for step in range(steps):
             a = self.__best_action__()
             if self.is_best(a):
-                pos = int(step/stepsize)*stepsize
-                try:
-                    nbest[pos] += 1
-                except:
-                    nbest[pos] = 1
+                nbest.incr(step)
+            # obtém a recompensa e atualiza o valor da ação
             r = a.reward
             a.update(r)
-            step += 1
         return nbest
 
 
 class Testbed:
 
+    # K-armed bandit: cria um bandit com k ações e epsilon dado por e
     def __init__(self, k=10, e=0):
         self.k = k
         self.e = e
 
-    def __init_stats(self, n, stepsize):
-        d = {}
-        pos = 0
-        while pos < n:
-            d[pos] = 0
-            pos += stepsize
-        return d
-
-    def __update_stats(self, stats, res):
-        for k,v in res.items():
-            stats[k] += v
-
     def run(self, runs=2000, runlen=1000, stepsize=10):
-        stats = self.__init_stats(runlen, stepsize)
+        stats = LearnStats.create(runlen, stepsize)
         for n in range(runs):
             r = RL0(self.k, self.e)
             res = r.learn(runlen, stepsize)
-            self.__update_stats(stats, res)
-        for k in stats:
-            stats[k] /= runs
-            stats[k] /= stepsize
+            stats.update(res)
+        # normaliza os resultados, em função da quantidade de execuções E largura de intervalo de 
+        # contabilização
+        stats.norm(runs*stepsize)
         return stats
 
 if __name__ == '__main__':
@@ -90,6 +110,6 @@ if __name__ == '__main__':
         t = Testbed(K, e)
         res = t.run()
         f = open('run_%.2f.log' % e, 'w')
-        for k, v in res.items():
+        for k, v in res.stats.items():
             f.write('%d %.6f\n' % (k, v))
         f.close()
