@@ -1,4 +1,5 @@
 # Ex. 6.5 - windy gridworld
+import sarsa
 from gridworld import GridWorld,Direction
 from sarsa import State,Action,Sarsa
 from typing import Tuple
@@ -15,7 +16,7 @@ class Windy(GridWorld):
     def __init__(self, **args):
         start = args.get('start', Windy.Start)
         goal = args.get('goal', Windy.Goal)
-        GridWorld.__init__(self, Windy.Columns, Windy.Rows, start=start, goal=goal)
+        GridWorld.__init__(self, Windy.Columns, Windy.Rows, start=start, goal=goal, actionclass=sarsa.DoubleAction)
         self.wind = args.get('wind', Windy.Wind)
 
     def __wind__(self, col):
@@ -54,7 +55,7 @@ class Windy4(Windy):
 
 if __name__ == '__main__':
     model = Windy()
-    p = Sarsa(model, alfa=0.5)
+    p = sarsa.DoubleQLearn(model, alfa=0.5)
     episode = 0
     total = 0
     while episode < 1000:
@@ -68,5 +69,5 @@ if __name__ == '__main__':
         m = s.pi.n
         print('%s %s' % (s.n, m.name))
 
-    # for n,s in model.states.items():
-    #     print('%s %s' % (n, s.pi.n))
+    for n,s in model.states.items():
+        print('%s %s' % (n, s.pi.n))

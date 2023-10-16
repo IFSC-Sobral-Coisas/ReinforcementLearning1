@@ -23,11 +23,18 @@ class State:
     def add_action(self, a:Action):
         self.actions.append(a)
 
+    def get_action(self, at:Action):
+        r = [a for a in self.actions if a.n == at.n]
+        if not r:
+            return at.__class__()
+        return r[0]
+
     @property
     def amax(self)->Action:
         amax = max(self.actions, key=lambda a: a.q)
-        lmax = filter(lambda a: a.q == amax.q, self.actions)
-        return random.choice(list(lmax))
+        lmax = [a for a in self.actions if a.q == amax.q]
+        # lmax = filter(lambda a: a.q == amax.q, self.actions)
+        return random.choice(lmax)
 
     @property
     def pi(self)->Action:
@@ -36,7 +43,7 @@ class State:
         else:
             # identifica ação com maior valor
             a = self.amax
-            a.count += 1
+        a.count += 1
         return a
 
     def initialize(self):
@@ -87,7 +94,7 @@ class Model:
         while not s.final:
             yield s
             s = self.next(s)
-        raise StopIteration('no more states')
+        #raise StopIteration('no more states')
 
 class Sarsa:
 
@@ -103,15 +110,25 @@ class Sarsa:
     def next_value(self, s: State)->float:
         return s.pi.q
 
-    def estimate(self, s:State)->int:
+    def evaluate(self, s:State):
         at = s.pi
+        r, stt = self.model.evaluate(s, at)
+        at.q += self.alfa * (r + self.gamma * self.next_value(stt) - at.q)
+        # print(s.n, at.n, at.q, r, stt.n, att.n, att.q)
+        s = stt
+        at = s.pi
+        return s,at
+
+    def estimate(self, s:State)->int:
+        # at = s.pi
         steps = 0
         while not s.final:
-            r,stt = self.model.evaluate(s, at)
-            at.q += self.alfa*(r + self.gamma*self.next_value(stt) - at.q)
-            # print(s.n, at.n, at.q, r, stt.n, att.n, att.q)
-            s = stt
-            at = s.pi
+            s,a = self.evaluate(s)
+            # r,stt = self.model.evaluate(s, at)
+            # at.q += self.alfa*(r + self.gamma*self.next_value(stt) - at.q)
+            # # print(s.n, at.n, at.q, r, stt.n, att.n, att.q)
+            # s = stt
+            # at = s.pi
             steps += 1
         return steps
 
@@ -126,6 +143,54 @@ class ExpSarsa(Sarsa):
         # valor esperado do valor da próxima ação
         soma = s.total
         if soma > 0:
-            return reduce(lambda x,a: x+a.q*a.count/soma, s.actions, 0)
+            return reduce(lambda x,a: x+a.q*a.count, s.actions, 0)/soma
         return s.amax.q
 
+@attr.s
+class DoubleAction:
+    '''Uma ação: especifica uma aposta para n unidades monetárias e possui um valor q'''
+    n = attr.ib(default=0)
+    q1 = attr.ib(default=0)
+    q2 = attr.ib(default=0)
+    count = attr.ib(default=0) # quantas vezes foi selecionada esta ação
+
+    @property
+    def q(self):
+        return self.q1 + self.q2
+
+    @q.setter
+    def q(self, n):
+        self.q1 = n
+        self.q2 = n
+
+class DoubleSarsa(Sarsa):
+
+    def next_value(self, s:State, q:str):
+        return getattr(s.pi,q)
+
+    def evaluate(self, s:State):
+        at = s.pi
+        r, stt = self.model.evaluate(s, at)
+        if random.random() > 0.5:
+            at.q1 += self.alfa * (r + self.gamma * self.next_value(stt, 'q2') - at.q1)
+        else:
+            at.q2 += self.alfa * (r + self.gamma * self.next_value(stt, 'q1') - at.q2)
+        att = s.pi
+        # print(s.n, r, at.q, at, stt.n, att.n, att.q)
+        s = stt
+        # at = s.pi
+        return s,att
+
+class DoubleQLearn(DoubleSarsa):
+
+    def next_value(self, s:State, q:str):
+        return getattr(s.amax,q)
+
+class DoubleExpSarsa(DoubleSarsa):
+
+    def next_value(self, s: State, q:str)->float:
+        # valor esperado do valor da próxima ação
+        soma = s.total
+        if soma > 0:
+            return reduce(lambda x,a: x+getattr(a,q)*a.count, s.actions, 0)/soma
+        return getattr(s.amax,q)

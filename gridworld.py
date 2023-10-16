@@ -24,6 +24,7 @@ class GridWorld(Model):
         self._goal = args.get('goal', (ncols-1, nrows-1))
         self._diagonal = args.get('diagonal', False)
         self._nomove = args.get('nomove', False)
+        self.__action_class = args.get('actionclass', Action)
         Model.__init__(self, **args)
 
     def __initialize__(self):
@@ -32,25 +33,25 @@ class GridWorld(Model):
                 pos = (col, row)
                 s = State(pos)
                 if col > 0:
-                    s.add_action(Action(Direction.Left))
+                    s.add_action(self.__action_class(Direction.Left))
                     if self._diagonal:
                         if row > 0:
-                            s.add_action(Action(Direction.UpLeft))
+                            s.add_action(self.__action_class(Direction.UpLeft))
                         if row < self.rows-1:
-                            s.add_action(Action(Direction.DownLeft))
+                            s.add_action(self.__action_class(Direction.DownLeft))
                 if col < self.cols-1:
-                    s.add_action(Action(Direction.Right))
+                    s.add_action(self.__action_class(Direction.Right))
                     if self._diagonal:
                         if row > 0:
-                            s.add_action(Action(Direction.UpRight))
+                            s.add_action(self.__action_class(Direction.UpRight))
                         if row < self.rows-1:
-                            s.add_action(Action(Direction.DownRight))
+                            s.add_action(self.__action_class(Direction.DownRight))
                 if row > 0:
-                    s.add_action(Action(Direction.Up))
+                    s.add_action(self.__action_class(Direction.Up))
                 if row < self.rows-1:
-                    s.add_action(Action(Direction.Down))
+                    s.add_action(self.__action_class(Direction.Down))
                 if self._nomove:
-                    s.add_action(Action(Direction.Nope))
+                    s.add_action(self.__action_class(Direction.Nope))
                 self.states[pos] = s
 
         self.goal.final = True
