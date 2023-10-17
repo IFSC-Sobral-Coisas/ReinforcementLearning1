@@ -65,9 +65,13 @@ if __name__ == '__main__':
         # print(episode, steps, total)
 
     s = model.start
+    passos = 0
     for s in model.episode(s):
         m = s.pi.n
         print('%s %s' % (s.n, m.name))
+        passos+= 1
 
     for n,s in model.states.items():
         print('%s %s' % (n, s.pi.n))
+
+    print(f'{passos} passos')

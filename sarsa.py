@@ -183,8 +183,17 @@ class DoubleSarsa(Sarsa):
 
 class DoubleQLearn(DoubleSarsa):
 
+    def __getmax(self, s:State, q:str):
+        qq = q == 'q1' and 'q2' or 'q1'
+        amax = max(s.actions, key=lambda a: getattr(a, qq))
+        lmax = [a for a in s.actions if a.q == amax.q]
+        return random.choice(lmax)
+
     def next_value(self, s:State, q:str):
-        return getattr(s.amax,q)
+        # lmax = filter(lambda a: a.q == amax.q, self.actions)
+        amax = self.__getmax(s, q)
+        # print(f'{amax}, {s}, {q}')
+        return getattr(amax,q)
 
 class DoubleExpSarsa(DoubleSarsa):
 
